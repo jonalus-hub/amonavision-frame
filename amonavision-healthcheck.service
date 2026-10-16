@@ -1,0 +1,9 @@
+[Unit]
+Description=AmonaVision periodic health check (Telegram alert on failure)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/bin/bash /home/av/AmonaVision/tools/health-alert.sh

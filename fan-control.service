@@ -1,0 +1,12 @@
+[Unit]
+Description=PWM Fan Controller (BCM 18 / physical pin 12)
+After=multi-user.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /home/av/AmonaVision/fan_control.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,15 @@
+[Unit]
+Description=AmonaVision: power-cycle the panel after every boot
+# Every boot, not only after a /reboot: 2026-10-08 the panel came up on
+# "No signal" from a cold start too (frame left unplugged a while).
+After=amonavision.service
+
+[Service]
+# simple, not oneshot: it waits for the viewer and then for the 4G to come
+# back, and must not hold up multi-user.target meanwhile.
+Type=simple
+User=root
+ExecStart=/usr/bin/bash /home/av/AmonaVision/tools/reboot-with-panel-cycle.sh after-boot
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Debug{% endblock %}
+{% block body %}
+<h1>Debug</h1>
+
+<h2>Actions</h2>
+<form method="post" class="inline">
+  <input type="hidden" name="action" value="restart">
+  <button type="submit" class="ghost">Restart the frame (soft, ~15 s)</button>
+</form>
+<form method="post" class="inline">
+  <input type="hidden" name="action" value="diag">
+  <button type="submit" class="ghost">Run diagnostics (test_setup.sh)</button>
+</form>
+<p class="muted">No reboot or <code>systemctl</code> from here — the soft restart
+uses the same mechanism as <code>/restart</code> in Telegram and needs no root.</p>
+
+{% if diag_output %}
+<h2>Diagnostics</h2>
+<pre>{{ diag_output }}</pre>
+{% endif %}
+
+<h2>Logs</h2>
+<p>
+  {% for name in logs %}
+    <a href="?log={{ name }}&n={{ n }}" {{ 'style=font-weight:700' if name == which }}>{{ name }}</a>
+    {% if not loop.last %}·{% endif %}
+  {% endfor %}
+  &nbsp;|&nbsp;
+  <a href="?log={{ which }}&n=200">200</a> ·
+  <a href="?log={{ which }}&n=500">500</a> ·
+  <a href="?log={{ which }}&n=1000">1000</a>
+  lines
+</p>
+<pre>{{ log_text }}</pre>
+{% endblock %}

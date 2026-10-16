@@ -1,0 +1,11 @@
+[Unit]
+Description=Watch for /screen requests from the AmonaVision bot
+
+[Path]
+# The bot runs as av and can't switch USB power itself; it only drops this
+# flag. tools/panel-power-cycle.sh deletes it first thing.
+PathExists=/tmp/amonavision_panel_reset
+Unit=amonavision-panel-reset.service
+
+[Install]
+WantedBy=multi-user.target

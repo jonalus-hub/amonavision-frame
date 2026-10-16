@@ -1,0 +1,9 @@
+[Unit]
+Description=AmonaVision liveness watchdog (restarts a wedged bot or tailscaled, re-plugs a stuck 4G dongle)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/bin/bash /home/av/AmonaVision/tools/bot-watchdog.sh

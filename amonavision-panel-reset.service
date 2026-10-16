@@ -1,0 +1,7 @@
+[Unit]
+Description=AmonaVision panel reset (power-cycle the Pi's USB ports: panel, mic, 4G dongle)
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/bin/bash /home/av/AmonaVision/tools/panel-power-cycle.sh

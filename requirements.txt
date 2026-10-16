@@ -1,0 +1,14 @@
+python-telegram-bot[ext]>=20.7
+python-dotenv>=1.0.0
+pygame-ce>=2.4.0
+ffpyplayer>=4.3.0
+sounddevice>=0.5.0
+soundfile>=0.12.0
+numpy>=1.24.0
+imageio-ffmpeg>=0.4.0
+RPi.GPIO>=0.7.0; sys_platform == "linux"
+opencv-python-headless>=4.8.0
+
+# LAN dashboard (web/app.py, amonavision-web.service) — isolated from the frame
+flask>=3.0.0
+

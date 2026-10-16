@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Media{% endblock %}
+{% block body %}
+<h1>Media &mdash; {{ media.count }} files · {{ media.bytes_h }}</h1>
+
+{% for f in media.folders %}
+<h2>{{ f.name }}/ &nbsp;<span class="muted">{{ f.count }} files · {{ f.bytes_h }}</span></h2>
+{% if f.files %}
+<table>
+  <tr><th></th><th class="wrap">File</th><th>Type</th><th>Size</th><th>Modified</th><th>Session</th></tr>
+  {% for it in f.files %}
+  <tr>
+    <td>
+      {% if it.kind == 'image' %}
+        <a href="/media/file/{{ it.rel }}" target="_blank"><img class="thumb" loading="lazy" src="/media/file/{{ it.rel }}"></a>
+      {% endif %}
+    </td>
+    <td class="wrap"><a href="/media/file/{{ it.rel }}" target="_blank">{{ it.name }}</a></td>
+    <td>{{ it.kind }}</td>
+    <td>{{ it.size_h }}</td>
+    <td>{{ it.mtime }}</td>
+    <td>{% if it.session %}<a href="/db#s{{ it.session }}">#{{ it.session }}</a>{% else %}<span class="muted">&mdash;</span>{% endif %}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="muted">(empty)</p>
+{% endif %}
+{% endfor %}
+{% endblock %}

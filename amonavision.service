@@ -1,0 +1,53 @@
+[Unit]
+Description=AmonaVision Smart Photo Frame
+# Deliberately NOT After=/Wants=network-online.target: this is a local-first
+# device — the photo display must come up even with no network at all, and
+# waiting for "online" status can add up to ~90s of black screen after a
+# power outage while the router/WiFi is still recovering. The Telegram bot
+# already retries connecting indefinitely on its own (bootstrap_retries=-1),
+# so nothing here needs to block on network readiness.
+# If the service crashes more than 5 times in 5 minutes, stop retrying.
+# SSH stays alive; run: sudo systemctl restart amonavision   to bring it back.
+StartLimitInterval=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=av
+Group=av
+WorkingDirectory=/home/av/AmonaVision
+Environment=SDL_VIDEODRIVER=kmsdrm
+# card0 is the v3d render-only GPU node (no display capability); card1 is the
+# actual vc4 KMS display device. Without this, SDL's auto-detection tries
+# card0 first, finds no usable CRTC, and gives up with "kmsdrm not available"
+# instead of falling through to card1.
+Environment=SDL_KMSDRM_DEVICE_INDEX=1
+# Audio must go through PipeWire, never straight to ALSA: the viewer has two
+# separate SDL audio clients (pygame's mixer for voice notes, ffpyplayer's own
+# SDL for video soundtracks), and the raw hdmi: ALSA device allows only one
+# opener. With SDL_AUDIODRIVER=alsa every video played silently ("Device or
+# resource busy"). PipeWire mixes both into the HDMI sink.
+Environment=SDL_AUDIODRIVER=pulse
+Environment=PULSE_RUNTIME_PATH=/run/user/1000/pulse
+Environment=PYTHONUNBUFFERED=1
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+Environment=GPIOZERO_PIN_FACTORY=lgpio
+# Kill any escaped process instances not in this service cgroup
+ExecStartPre=/bin/bash -c 'pkill -9 -f "viewer[.]py" 2>/dev/null; pkill -9 -f "run[.]py" 2>/dev/null; pkill -9 -f "start[.]py" 2>/dev/null; sleep 1; exit 0'
+# Wait for PipeWire audio socket (up to 20s) — local dependency, not network
+ExecStartPre=/bin/bash -c 'for i in $(seq 1 20); do [ -S /run/user/1000/pulse/native ] && exit 0; sleep 1; done; exit 0'
+KillMode=control-group
+TimeoutStopSec=15
+# Invoked via bash (not as a bare executable) so a deploy that drops the +x
+# bit can't 203/EXEC the service into a StartLimit failure and take the frame
+# down. launch.sh still `cd`s to its own dir correctly ($0 is the full path).
+ExecStart=/bin/bash /home/av/AmonaVision/launch.sh
+Restart=always
+RestartSec=15
+# Lower priority so SSH and system services always get CPU first
+Nice=10
+StandardOutput=null
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,44 @@
+[Unit]
+Description=AmonaVision LAN dashboard (read-mostly, isolated from the frame)
+# Deliberately NOT ordered with amonavision.service and nothing depends on it:
+# a crash / hang / leak here must never be able to touch the frame.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=av
+Group=av
+WorkingDirectory=/home/av/AmonaVision
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/av/AmonaVision/venv/bin/python3 /home/av/AmonaVision/web/app.py
+Restart=always
+RestartSec=10
+# The frame is Nice=10 -> it always wins the CPU over this.
+Nice=15
+IOSchedulingClass=idle
+
+# Hard caps so a bug here can never starve or OOM the frame.
+CPUQuota=20%
+MemoryHigh=96M
+MemoryMax=128M
+TasksMax=20
+OOMPolicy=stop
+
+# Light hardening. ProtectSystem=full keeps /usr /boot /etc read-only while
+# leaving /home (config.txt) and /tmp (the soft-restart flag) writable, which
+# the dashboard needs. PrivateTmp must stay off so the flag it touches is the
+# same /tmp/amonavision_restart that viewer.py watches.
+NoNewPrivileges=yes
+ProtectSystem=full
+PrivateTmp=no
+ProtectControlGroups=yes
+ProtectKernelTunables=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+
+StandardOutput=null
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

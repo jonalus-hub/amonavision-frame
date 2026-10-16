@@ -1,0 +1,10 @@
+[Unit]
+Description=Run the AmonaVision bot liveness watchdog periodically
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=5min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

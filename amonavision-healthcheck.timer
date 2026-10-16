@@ -1,0 +1,13 @@
+[Unit]
+Description=Run AmonaVision health check periodically
+
+[Timer]
+# Give the system time to settle (network, NTP) before the first post-boot run.
+OnBootSec=5min
+OnUnitActiveSec=3h
+# Catch up on a missed run if the Pi was powered off when the timer would
+# have fired -- relevant for an unattended device that gets power-cycled.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

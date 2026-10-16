@@ -1,0 +1,7 @@
+[Unit]
+Description=AmonaVision /reboot (reboot, then power-cycle the panel once back up)
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/bin/bash /home/av/AmonaVision/tools/reboot-with-panel-cycle.sh request

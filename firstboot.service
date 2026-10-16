@@ -1,0 +1,29 @@
+[Unit]
+Description=AmonaVision First-Boot Validation
+# Run after everything that matters is up — including a correct clock, so the
+# TLS-dependent tests (Telegram / Tailscale) don't fail on a cold-boot stale clock.
+After=multi-user.target network-online.target time-sync.target tailscaled.service amonavision.service smbd.service
+Wants=network-online.target time-sync.target
+# Only run when setup.sh has created the trigger flag
+ConditionPathExists=/var/lib/amonavision/.firstboot-pending
+
+[Service]
+Type=oneshot
+User=av
+# Wait up to 60s for internet to fully establish before testing.
+# Probe TCP/443, not TCP/53 — mobile/4G APNs often block or hijack TCP/53.
+ExecStartPre=/bin/bash -c '\
+    for i in $(seq 1 20); do \
+        python3 -c "import socket; socket.create_connection((\"1.1.1.1\",443),3)" 2>/dev/null && exit 0; \
+        sleep 3; \
+    done; exit 0'
+Environment=FIRSTBOOT_RUN="first reboot after setup"
+ExecStart=/bin/bash /home/av/AmonaVision/test_setup.sh
+# Flag is removed inside test_setup.sh so it always clears even on test failure
+StandardOutput=journal+console
+StandardError=journal+console
+# Don't restart — if tests fail we want to know, not retry blindly
+Restart=no
+
+[Install]
+WantedBy=multi-user.target

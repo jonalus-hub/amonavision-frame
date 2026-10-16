@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Overview{% endblock %}
+{% block head %}<meta http-equiv="refresh" content="20">{% endblock %}
+{% block body %}
+<h1>System overview <span class="muted" style="font-size:.8rem">· auto-refresh 20 s</span></h1>
+
+<h2>Services</h2>
+<div class="grid">
+  <div class="card">
+    <div class="k">Frame (amonavision)</div>
+    <div class="v">
+      {% if frame.active == 'active' %}<span class="pill ok">{{ frame.active }} / {{ frame.sub }}</span>
+      {% else %}<span class="pill bad">{{ frame.active }} / {{ frame.sub }}</span>{% endif %}
+    </div>
+    <div class="muted">restarts: {{ frame.restarts }} · since {{ frame.since }}</div>
+  </div>
+  <div class="card">
+    <div class="k">Telegram bot</div>
+    <div class="v">
+      {% if 'connected' in bot %}<span class="pill ok">{{ bot }}</span>
+      {% elif 'stale' in bot %}<span class="pill warn">{{ bot }}</span>
+      {% elif 'OFFLINE' in bot %}<span class="pill bad">{{ bot }}</span>
+      {% else %}<span class="pill">{{ bot }}</span>{% endif %}
+    </div>
+  </div>
+  <div class="card">
+    <div class="k">Tailscale</div>
+    <div class="v">
+      {% if 'online' in tailscale %}<span class="pill ok">{{ tailscale }}</span>
+      {% elif 'OFFLINE' in tailscale %}<span class="pill bad">{{ tailscale }}</span>
+      {% else %}<span class="pill">{{ tailscale }}</span>{% endif %}
+    </div>
+  </div>
+  <div class="card">
+    <div class="k">Fan</div>
+    <div class="v"><span class="pill {{ 'ok' if fan.active=='active' else 'bad' }}">{{ fan.active }}</span></div>
+    {% if fan_speed.ok %}
+      <div class="muted">{{ fan_speed.pct }}% {{ 'PWM' if fan_speed.enabled else '(PWM off)' }}</div>
+    {% endif %}
+  </div>
+  <div class="card">
+    <div class="k">Internet connection</div>
+    <div class="v">
+      {% if network.kind == '4g' %}<span class="pill ok">{{ network.label }}</span>
+      {% elif network.kind == 'wifi' %}<span class="pill warn">{{ network.label }}</span>
+      {% elif network.kind == 'none' %}<span class="pill bad">{{ network.label }}</span>
+      {% else %}<span class="pill">{{ network.label }}</span>{% endif %}
+    </div>
+    <div class="muted">
+      {% if network.kind == '4g' %}primary link at the deployment site
+      {% elif network.kind == 'wifi' %}fallback — normal while testing, should not show up at the final site
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<h2>Hardware</h2>
+<div class="grid">
+  <div class="card"><div class="k">Temp CPU</div><div class="v">{{ sysinfo.temp_c if sysinfo.temp_c is not none else '?' }} °C</div></div>
+  <div class="card"><div class="k">RAM</div>
+    <div class="v">{{ sysinfo.ram_used_mb }} / {{ sysinfo.ram_total_mb }} MB</div>
+    <div class="muted">{{ sysinfo.ram_pct }} %</div></div>
+  <div class="card"><div class="k">Disk</div>
+    <div class="v">{{ sysinfo.disk_pct }} %</div>
+    <div class="muted">{{ (sysinfo.disk_used or 0) // 1073741824 }} / {{ (sysinfo.disk_total or 0) // 1073741824 }} GB</div></div>
+  <div class="card"><div class="k">Uptime</div><div class="v">{{ sysinfo.uptime }}</div>
+    <div class="muted">load {{ sysinfo.loadavg | join('  ') }}</div></div>
+</div>
+
+<h2>Content</h2>
+<div class="grid">
+  <div class="card"><div class="k">Sessions</div>
+    <div class="v">{{ dbstats.sessions_total if dbstats.ok else '?' }}</div>
+    {% if dbstats.ok %}<div class="muted">
+      {% for s, c in dbstats.by_status.items() %}{{ s }}: {{ c }}{% if not loop.last %} · {% endif %}{% endfor %}
+    </div>{% endif %}</div>
+  <div class="card"><div class="k">Files in DB</div><div class="v">{{ dbstats.files_total if dbstats.ok else '?' }}</div></div>
+  <div class="card"><div class="k">Media on disk</div>
+    <div class="v">{{ media_summary.count }}</div>
+    <div class="muted">{{ media_summary.bytes_h }}</div></div>
+  <div class="card"><div class="k">Dashboard</div>
+    <div class="v"><span class="pill ok">active</span></div>
+    <div class="muted">up {{ web_uptime }} s</div></div>
+</div>
+
+<h2>Self-healing</h2>
+<div class="grid">
+  <div class="card"><div class="k">Watchdog</div>
+    <div class="v" style="font-size:.95rem">
+      bot: {{ watchdog.get('last_restart_epoch','0') }}<br>
+      tailscale: {{ watchdog.get('last_ts_restart_epoch','0') }}<br>
+      reboot: {{ watchdog.get('last_reboot_trigger_epoch','0') }}
+    </div>
+    <div class="muted">epoch of the last trigger (0 = never)</div></div>
+  <div class="card"><div class="k">Health-check</div>
+    <div class="v" style="font-size:.95rem">
+      status: {{ healthcheck.get('status','?') }}<br>
+      failures: {{ healthcheck.get('fails','?') }} · warnings: {{ healthcheck.get('warns','?') }}
+    </div>
+    <div class="muted">last: {{ healthcheck.get('last_run','?') }}</div></div>
+</div>
+{% endblock %}

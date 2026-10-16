@@ -1,0 +1,7 @@
+# All text files use LF (Linux/Pi target)
+* text=auto eol=lf
+
+# Binaries — no conversion
+*.png binary
+*.jpg binary
+*.bin binary

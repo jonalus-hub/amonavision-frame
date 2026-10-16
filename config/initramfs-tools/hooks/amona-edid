@@ -1,0 +1,23 @@
+#!/bin/sh
+# Installed to /etc/initramfs-tools/hooks/ by setup.sh.
+# vc4 is loaded from the initramfs, before the root filesystem is mounted, so
+# drm.edid_firmware=HDMI-A-1:edid/amona.bin can only find the panel's EDID if
+# it is inside the initramfs. update-initramfs runs every hook on each kernel
+# update, so the EDID is carried into every future initramfs automatically.
+# Must always exit 0: a failing hook aborts update-initramfs, and with it the
+# kernel upgrade that triggered it.
+PREREQ=""
+prereqs() { echo "$PREREQ"; }
+case "$1" in
+prereqs) prereqs; exit 0 ;;
+esac
+
+. /usr/share/initramfs-tools/hook-functions
+
+EDID=/lib/firmware/edid/amona.bin
+if [ -f "$EDID" ]; then
+    copy_file firmware "$EDID"
+else
+    echo "W: amona-edid: $EDID missing, panel EDID not added to the initramfs" >&2
+fi
+exit 0

@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Database{% endblock %}
+{% block body %}
+<h1>Database</h1>
+
+<div class="grid">
+  <div class="card"><div class="k">Sessions</div><div class="v">{{ stats.sessions_total if stats.ok else '?' }}</div>
+    {% if stats.ok %}<div class="muted">
+      {% for t, c in stats.by_type.items() %}{{ t }}: {{ c }}{% if not loop.last %} · {% endif %}{% endfor %}
+    </div>{% endif %}</div>
+  <div class="card"><div class="k">Files</div><div class="v">{{ stats.files_total if stats.ok else '?' }}</div></div>
+  <div class="card"><div class="k">amonavision.db</div><div class="v">{{ db_size }}</div>
+    <div class="muted">WAL: {{ wal_size }}</div></div>
+</div>
+{% if not stats.ok %}<div class="flash error">Database not available: {{ stats.error }}</div>{% endif %}
+
+<h2>SQL query (read-only)</h2>
+<form method="post">
+  <textarea name="sql" rows="3" placeholder="SELECT * FROM sessions WHERE status='READ' ORDER BY id DESC">{{ sql }}</textarea>
+  <div style="margin-top:.4rem"><button type="submit">Run</button>
+    <span class="muted">SELECT / WITH / PRAGMA · one statement · max. 500 rows · read-only connection</span></div>
+</form>
+{% if sql_error %}<div class="flash error">{{ sql_error }}</div>{% endif %}
+{% if sql_cols %}
+<table><tr>{% for c in sql_cols %}<th>{{ c }}</th>{% endfor %}</tr>
+  {% for row in sql_rows %}<tr>{% for c in sql_cols %}<td class="wrap">{{ row[c] }}</td>{% endfor %}</tr>{% endfor %}
+</table>
+<p class="muted">{{ sql_rows|length }} row(s)</p>
+{% endif %}
+
+<h2>Scoring <span class="muted">— how the frame picks the next photo/video</span></h2>
+{% if not scoring.ok %}
+<div class="flash error">Scoring not available: {{ scoring.error }}</div>
+{% else %}
+  {% if not scoring.enabled %}
+  <p class="muted">Scoring is off in config.txt (Scoring.enabled = False) — the frame advances in sequential order. Scores shown for information only.</p>
+  {% endif %}
+  {% if scoring.rows %}
+  <p class="muted">Each round deals a "ticket bag": every session gets tickets according to its score
+    (at least 1 — nothing is ever left out), the bag is shuffled, and the frame draws one per cycle without replacement until it is empty.
+    So a high score shows up more often without hogging the turn or locking the frame into a loop between
+    two sessions — none can repeat more times than its number of tickets before the others have had their turn.</p>
+  <p class="muted">Current weights — novelty {{ scoring.weights.weight_novelty }} · anti-repetition {{ scoring.weights.weight_anti_repetition }}
+    · sender balance {{ scoring.weights.weight_sender_balance }} · explicit interest {{ scoring.weights.weight_explicit_interest }}
+    · implicit interest {{ scoring.weights.weight_implicit_interest }}</p>
+  <div style="overflow:auto">
+  <table>
+    <tr>
+      <th>#</th><th>session</th><th>type</th><th>sender</th>
+      <th>novelty</th><th>anti-rep.</th><th>balance</th><th>explicit</th><th>implicit</th>
+      <th>TOTAL</th><th>tickets</th><th>prob./round</th><th>views</th><th>avg. dwell</th>
+    </tr>
+    {% for r in scoring.rows %}
+    <tr{% if loop.first %} style="background:#1f6f3f22"{% endif %}>
+      <td class="wrap">{{ loop.index }}</td>
+      <td class="wrap"><a href="#s{{ r.id }}">#{{ r.id }}</a></td>
+      <td class="wrap">{{ r.type }}</td>
+      <td class="wrap">{{ r.sender_id }}</td>
+      <td class="wrap">{{ '%.3f'|format(r.novelty) }}</td>
+      <td class="wrap">{{ '%.3f'|format(r.anti_repetition) }}</td>
+      <td class="wrap">{{ '%.3f'|format(r.sender_balance) }}</td>
+      <td class="wrap">{{ '%.3f'|format(r.explicit) }}</td>
+      <td class="wrap">{{ '%.3f'|format(r.implicit) }}</td>
+      <td class="wrap"><b>{{ '%.3f'|format(r.total) }}</b></td>
+      <td class="wrap">{{ r.tickets }}</td>
+      <td class="wrap">{{ '%.1f'|format(r.probability * 100) }} %</td>
+      <td class="wrap">{{ r.show_count }}</td>
+      <td class="wrap">{{ r.avg_dwell_s }}s</td>
+    </tr>
+    {% endfor %}
+  </table>
+  </div>
+  <p class="muted">Sorted from highest to lowest total score. Tickets = this row's score ÷ the lowest
+    score in the group, rounded, capped at {{ scoring.max_tickets }} (so no session can hog the round
+    even if it scores far above the rest); this is exactly what <code>build_round()</code> deals — in
+    practice it also leaves out the session on screen right now, which this table cannot know.
+    Recent senders considered for "balance": {{ scoring.recent_senders|join(', ') if scoring.recent_senders else '—' }}</p>
+  {% else %}
+  <p class="muted">No eligible session right now (all PROCESSING/HIDDEN or with files not yet optimized).</p>
+  {% endif %}
+{% endif %}
+
+<h2>sessions <span class="muted">(500 most recent)</span></h2>
+<div style="overflow:auto">
+<table>
+  <tr>{% for c in sess_cols %}<th>{{ c }}</th>{% endfor %}<th>files</th></tr>
+  {% for s in sessions %}
+  <tr id="s{{ s.id }}">
+    {% for c in sess_cols %}<td class="wrap">{{ s[c] }}</td>{% endfor %}
+    <td class="wrap">
+      {% for f in files_by_session.get(s.id, []) %}
+        <div><a href="/media/file/{{ f.file_path }}" target="_blank" title="{{ f.file_path }}">{{ f.file_type }}</a>
+          {% if f.is_optimized %}<span class="pill ok">opt</span>{% endif %}</div>
+      {% endfor %}
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+</div>
+{% endblock %}

@@ -1,0 +1,92 @@
+# AmonaVision configuration
+# Edit as needed; the frame reads it at start-up (/restart to apply).
+
+[Viewer]
+# Fullscreen: True or False
+fullscreen = True
+
+# Window size (only used if fullscreen = False)
+window_width = 1280
+window_height = 720
+
+# Photo slideshow interval (seconds)
+slideshow_interval = 10.0
+
+[Overlay]
+# Text pills above the physical PLAY / RECORD buttons while a video or voice
+# note is on screen:
+#   "Play"  (left of centre)  until it has been played
+#   "Reply" (right of centre) once played
+# Hidden during the slideshow — they only show after a real button press, and
+# hide again after hide_after_seconds without another press.
+# enabled             → True/False to show or remove the pills
+# panel_width_mm      → REAL width of the picture on the panel, edge to edge
+# button_offset_cm    → distance of each pill from the centre
+# bottom_margin_px    → height above the bottom edge (match it to your buttons)
+# hide_after_seconds  → seconds without a press before they hide
+# pill_font_size      → font size of each pill's text
+# tutorial_mode       → True → the pills stay visible all the time (for
+#                        someone still learning the buttons). Toggle it from
+#                        the web dashboard; not meant to be left on for
+#                        normal day-to-day use.
+enabled = True
+panel_width_mm = 230
+button_offset_cm = 1.0
+bottom_margin_px = 48
+hide_after_seconds = 10.0
+pill_font_size = 42
+tutorial_mode = False
+
+[GPIO]
+# GPIO (BCM) pins of the physical buttons
+pin_previous = 9
+pin_play_pause = 17
+pin_record = 27
+pin_next = 22
+
+[Audio]
+# Recording sample rate (Hz)
+samplerate = 48000
+
+[System]
+# True → restart the frame automatically every day at 4:00 AM
+# False → no automatic restart
+daily_restart = True
+
+[Scoring]
+# True → the frame picks the next photo by score (see app/scoring.py)
+# False → photos are shown in sequential order
+enabled = True
+
+# Weight of each factor (0.0 = off, higher = more influence)
+weight_novelty = 1.0
+weight_anti_repetition = 1.0
+weight_sender_balance = 1.0
+weight_explicit_interest = 1.0
+weight_implicit_interest = 1.0
+
+# Novelty: days until a new photo's priority halves
+novelty_halflife_days = 3.0
+
+# Anti-repetition: hours until a just-shown photo is eligible again
+suppression_hours = 24.0
+
+# Sender balance: number of recent photos to consider
+sender_balance_window = 20
+
+# Explicit interest: days until the boost from a voice reply halves
+explicit_halflife_days = 30.0
+
+# Implicit interest: seconds on screen that count as full interest
+implicit_dwell_threshold_seconds = 30.0
+
+[Telegram]
+# Monday reminder to the family group (TELEGRAM_GROUP_CHAT_ID in .env)
+# weekly_reminder      → True/False to turn it on or off
+# weekly_reminder_time → when it is sent (HH:MM, Raspberry Pi local time)
+# weekly_reminder_text → the message (a single line)
+# Changes apply on /restart. /reminder (admin only) shows the state, the next
+# send time and a preview, without posting to the group.
+weekly_reminder = True
+weekly_reminder_time = 10:00
+weekly_reminder_text = I bet you had a great weekend! 📸 You must have lots of photos to share with grandma 😉

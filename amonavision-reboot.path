@@ -1,0 +1,11 @@
+[Unit]
+Description=Watch for /reboot requests from the AmonaVision bot
+
+[Path]
+# The bot runs as av and can't reboot (sudo wants a password); it only drops
+# this flag. tools/reboot-with-panel-cycle.sh deletes it first thing.
+PathExists=/tmp/amonavision_reboot_request
+Unit=amonavision-reboot.service
+
+[Install]
+WantedBy=multi-user.target

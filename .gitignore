@@ -1,0 +1,43 @@
+# Byte-compiled / optimised
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+venv/
+.venv/
+
+# Environment secrets
+.env
+
+# Claude Code local settings
+.claude/
+
+# Logs (including rotated files like app.log.1, app.log.2)
+app/logs/*
+!app/logs/.gitkeep
+setup.log
+
+# Databases
+*.db
+*.db-wal
+*.db-shm
+
+# Runtime state
+app/brightness.json
+
+# Received & processed media (large files, personal content)
+app/media/received/*
+app/media/processed/*
+app/media/recordings/*
+app/media/thumbnails/
+!app/media/received/.gitkeep
+!app/media/processed/.gitkeep
+!app/media/recordings/.gitkeep
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

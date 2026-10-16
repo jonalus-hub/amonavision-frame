@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Config{% endblock %}
+{% block body %}
+<h1>Configuration</h1>
+<p class="muted">Only these settings can be changed. Nothing that could leave the frame
+unusable (GPIO pins, resolution, audio) is editable from here.</p>
+
+<form method="post">
+  {% for section, key, validator, typ in whitelist %}
+    <label>{{ section }}.{{ key }}</label>
+    {% if typ == 'checkbox' %}
+      <input type="checkbox" name="{{ section }}.{{ key }}"
+             {{ 'checked' if values[(section, key)] == 'True' }}>
+      <span class="muted">(checked = True)</span>
+    {% else %}
+      <input type="{{ typ }}" step="any" name="{{ section }}.{{ key }}"
+             value="{{ values[(section, key)] }}">
+    {% endif %}
+  {% endfor %}
+
+  <div style="margin-top:1rem">
+    <label><input type="checkbox" name="apply" checked> Restart the frame on save (~15 s)</label>
+    <button type="submit" style="margin-top:.5rem">Save</button>
+  </div>
+</form>
+
+<h2>Current config.txt</h2>
+<pre>{{ raw }}</pre>
+{% endblock %}
