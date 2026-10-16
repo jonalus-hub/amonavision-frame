@@ -356,4 +356,4 @@ Run `bash /home/av/AmonaVision/test_setup.sh` for a full check. Common issues:
 
 ## License
 
-Apache License 2.0 — see [LICENSE](LICENSE).
+GNU General Public License v3.0 — see [LICENSE](LICENSE).
