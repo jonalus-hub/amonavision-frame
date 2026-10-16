@@ -356,4 +356,4 @@ Run `bash /home/av/AmonaVision/test_setup.sh` for a full check. Common issues:
 
 ## License
 
-MIT — feel free to use and modify.
+Apache License 2.0 — see [LICENSE](LICENSE).
