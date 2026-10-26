@@ -1,5 +1,5 @@
 [Unit]
-Description=AmonaVision LAN dashboard (read-mostly, isolated from the frame)
+Description=AmonaVision LAN dashboard (photo gallery + uploads, isolated from the frame)
 # Deliberately NOT ordered with amonavision.service and nothing depends on it:
 # a crash / hang / leak here must never be able to touch the frame.
 After=network-online.target
@@ -20,14 +20,16 @@ IOSchedulingClass=idle
 
 # Hard caps so a bug here can never starve or OOM the frame.
 CPUQuota=20%
-MemoryHigh=96M
-MemoryMax=128M
+# OpenCV (gallery thumbnails, uploads) and a decoded 30 MB photo need more than
+# the read-only dashboard did.
+MemoryHigh=256M
+MemoryMax=384M
 TasksMax=20
 OOMPolicy=stop
 
 # Light hardening. ProtectSystem=full keeps /usr /boot /etc read-only while
-# leaving /home (config.txt) and /tmp (the soft-restart flag) writable, which
-# the dashboard needs. PrivateTmp must stay off so the flag it touches is the
+# leaving /home (config.txt, uploads, app/media, the DB) and /tmp (the
+# soft-restart flag) writable, which the dashboard needs. PrivateTmp must stay off so the flag it touches is the
 # same /tmp/amonavision_restart that viewer.py watches.
 NoNewPrivileges=yes
 ProtectSystem=full

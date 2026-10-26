@@ -205,18 +205,31 @@ ssh av@100.x.y.z "tail -f /home/av/AmonaVision/app/logs/startup.log"
 
 ## LAN Dashboard
 
-A small read-mostly web dashboard for the family (not the person with the
-frame) at **`http://<pi-ip>:8080`** — system/project state, every media file
-and its weight, the whole database (incl. a read-only SQL box), a whitelisted
-config editor, and a soft-restart / diagnostics button.
+A small web dashboard for the family (not the person with the frame) at
+**`http://<pi-ip>:8080`**. Its home page is a photo gallery of everything on
+the frame, in the style of Immich: a timeline grouped by day, and clicking a
+photo opens it full screen with its details (who sent it and how, when, how
+often the frame has shown it, its voice note and the replies recorded on the
+frame). Photos can be added right there, with the Upload button or by
+dropping them on the page. The other pages show system/project state
+(**Status**), every media file and its weight, the whole database (incl. a
+read-only SQL box), a whitelisted config editor, and a soft-restart /
+diagnostics button.
 
 - **Isolated by design** (`amonavision-web.service`): its own unit, no
   ordering vs `amonavision.service`, `Nice=15`, `CPUQuota=20%`,
-  `MemoryMax=128M`, `OOMPolicy=stop`. A crash/hang/leak here cannot touch the
-  frame. The DB is opened `mode=ro` + `PRAGMA query_only`; the only things it
-  ever writes are `config.txt` (atomic, comment-preserving, whitelisted keys
-  only) and `/tmp/amonavision_restart` (the same soft-restart flag `/restart`
-  in Telegram uses — no root needed).
+  `MemoryMax=384M`, `OOMPolicy=stop`. A crash/hang/leak here cannot touch the
+  frame. Everything it shows comes from the DB opened `mode=ro` +
+  `PRAGMA query_only`; the only things it writes are `config.txt` (atomic,
+  comment-preserving, whitelisted keys only), `/tmp/amonavision_restart` (the
+  same soft-restart flag `/restart` in Telegram uses — no root needed), the
+  gallery's thumbnails (`app/media/thumbnails/web/`) and uploaded photos.
+- **Uploads** go through the bot's own pipeline (`MessageGrouper`), so they get
+  the same file naming, processing for the frame and DB rows as a photo sent on
+  Telegram. They're stored the way Telegram stores photos: JPEG, at most
+  2560 px, metadata (GPS included) removed; JPEG, PNG and WebP are accepted, up
+  to 30 MB each. Like any new photo, they join the slideshow at its next round
+  (the arrow buttons reach them straight away).
 - **Auth**: HTTP Basic, one shared password in `.env` as `WEB_PASSWORD`. The
   service **refuses to start** if it isn't set.
 - Only reachable on the LAN and over Tailscale — no port is forwarded.

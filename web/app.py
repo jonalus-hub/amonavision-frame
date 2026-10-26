@@ -1,22 +1,29 @@
 """
 AmonaVision — LAN dashboard
 ===========================
-A small, read-mostly web dashboard for the family to inspect the frame:
-project/system state, every media file and its weight, the whole database,
-plus a whitelisted config editor and a few debug actions.
+A small web dashboard for the family: a photo gallery of everything on the
+frame (the home page), where photos can also be added straight from the
+browser, plus project/system state, every media file and its weight, the
+whole database, a whitelisted config editor and a few debug actions.
 
 Design constraints (see amonavision-web.service):
   * Runs as its OWN systemd service, fully independent of amonavision.service.
     A crash / hang / leak here cannot touch the frame.
-  * Read-only by default. The SQLite DB is opened mode=ro + query_only.
+  * Read-only by default. The SQLite DB is opened mode=ro + query_only for
+    everything it shows.
   * The ONLY things it ever writes are config.txt (atomic, comment-preserving,
-    whitelisted keys only) and /tmp/amonavision_restart (the soft-restart flag
-    viewer.py already watches).
+    whitelisted keys only), /tmp/amonavision_restart (the soft-restart flag
+    viewer.py already watches), the gallery's thumbnails
+    (app/media/thumbnails/web/) and photos uploaded from the gallery. Uploads
+    go through the bot's own MessageGrouper, so they get exactly the file
+    naming, processing and DB rows a photo sent on Telegram gets.
   * No pygame / RPi.GPIO / anything the frame owns is imported. The one
     exception is app.scoring — pure math (novelty/anti-repetition/interest
     formulas), zero I/O, no hardware — imported read-only to show the
     slideshow's actual picking logic on /db, so scoring bugs are visible
     from the dashboard instead of requiring an SSH session to diagnose.
+    OpenCV and the grouper (gallery thumbnails, uploads) are imported only
+    when first needed.
   * Every route is wrapped so an error returns a 500 page and the server
     stays up.
 
@@ -27,16 +34,20 @@ without a password.
 
 from __future__ import annotations
 
+import asyncio
 import hmac
 import html
 import logging
 import math
 import os
 import re
+import secrets
+import sys
+import threading
 import sqlite3
 import subprocess
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -45,6 +56,7 @@ from flask import (
     Response,
     abort,
     flash,
+    jsonify,
     redirect,
     render_template,
     request,
@@ -82,6 +94,15 @@ MEDIA_DIRS = ("received", "processed", "recordings", "thumbnails")
 LOG_DIR = PROJECT_ROOT / "app" / "logs"
 CONFIG_FILE = PROJECT_ROOT / "config.txt"
 RESTART_FLAG = Path("/tmp/amonavision_restart")  # matches viewer.py / bot.py
+
+# Gallery thumbnails: s<session>_<source stem>_<w>x<h>_<orig w>x<orig h>.jpg,
+# so the page can lay out its justified rows without opening any image.
+GALLERY_THUMBS = MEDIA_ROOT / "thumbnails" / "web"
+GALLERY_THUMB_HEIGHT = 480          # px; rows are ~220 px tall, so sharp on 2x screens
+# Uploads are stored the way Telegram stores photos: JPEG, at most 2560 px.
+UPLOAD_MAX_BYTES = 30 * 1024 * 1024
+UPLOAD_MAX_SIDE = 2560
+UPLOAD_JPEG_QUALITY = 90
 
 LOG_FILES = {
     "app": LOG_DIR / "app.log",
@@ -145,6 +166,13 @@ def _require_auth():
         401,
         {"WWW-Authenticate": 'Basic realm="AmonaVision"'},
     )
+
+
+@app.before_request
+def _upload_size_limit():
+    # Every other form here is tiny (MAX_CONTENT_LENGTH); only uploads carry photos.
+    if request.endpoint == "upload":
+        request.max_content_length = UPLOAD_MAX_BYTES
 
 
 # ---------------------------------------------------------------------------
@@ -602,6 +630,245 @@ def write_config(updates: dict[tuple[str, str], str]) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Gallery
+# ---------------------------------------------------------------------------
+_THUMB_NAME = re.compile(
+    r"^s(?P<sid>\d+)_(?P<stem>.+)_(?P<w>\d+)x(?P<h>\d+)_(?P<ow>\d+)x(?P<oh>\d+)\.jpg$"
+)
+_REPLY_NAME = re.compile(r"^reply_(?P<d>\d{8})_(?P<t>\d{6})_s(?P<sid>\d+)\.(ogg|wav)$")
+
+# The frame only counts a photo as seen once someone stops on it with the
+# arrows or plays its video / voice note, not when the slideshow shows it.
+STATUS_LABELS = {
+    "UNREAD": "New, nobody has stopped on it on the frame yet",
+    "READ": "Looked at on the frame",
+    "HIDDEN": "Hidden from the frame",
+    "PROCESSING": "Being prepared for the frame",
+}
+
+
+def _thumb_index() -> dict[str, dict]:
+    """Gallery thumbnails already made, keyed by 's<session>_<source stem>'."""
+    idx: dict[str, dict] = {}
+    if GALLERY_THUMBS.is_dir():
+        with os.scandir(GALLERY_THUMBS) as it:
+            for e in it:
+                m = _THUMB_NAME.match(e.name)
+                if m:
+                    idx[f"s{m['sid']}_{m['stem']}"] = {
+                        "name": e.name, "w": int(m["w"]), "h": int(m["h"]),
+                        "ow": int(m["ow"]), "oh": int(m["oh"]),
+                    }
+    return idx
+
+
+def _make_thumb(key: str, src: Path, video: bool) -> dict | None:
+    """Downscaled copy of a session's photo (or of a video's first frame)."""
+    import cv2
+
+    frame_jpg = None
+    if video:
+        # The grouper normally leaves the first frame in thumbnails/; if not, grab it.
+        cached = MEDIA_ROOT / "thumbnails" / f"thumb_{src.name}"
+        cached = cached.with_name(cached.name + ".jpg")
+        if cached.exists():
+            src = cached
+        else:
+            import imageio_ffmpeg
+
+            GALLERY_THUMBS.mkdir(parents=True, exist_ok=True)
+            frame_jpg = GALLERY_THUMBS / f".frame_{secrets.token_hex(4)}.jpg"
+            subprocess.run(
+                [imageio_ffmpeg.get_ffmpeg_exe(), "-y", "-loglevel", "error", "-i", str(src),
+                 "-frames:v", "1", str(frame_jpg)],
+                capture_output=True, timeout=30,
+            )
+            src = frame_jpg
+    try:
+        img = cv2.imread(str(src), cv2.IMREAD_COLOR)
+    finally:
+        if frame_jpg is not None:
+            frame_jpg.unlink(missing_ok=True)
+    if img is None:
+        return None
+    oh, ow = img.shape[:2]
+    scale = min(1.0, GALLERY_THUMB_HEIGHT / oh)
+    tw, th = max(1, round(ow * scale)), max(1, round(oh * scale))
+    if scale < 1.0:
+        img = cv2.resize(img, (tw, th), interpolation=cv2.INTER_AREA)
+    ok, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 82])
+    if not ok:
+        return None
+    GALLERY_THUMBS.mkdir(parents=True, exist_ok=True)
+    name = f"{key}_{tw}x{th}_{ow}x{oh}.jpg"
+    tmp = GALLERY_THUMBS / f".{name}.{secrets.token_hex(4)}.tmp"
+    tmp.write_bytes(buf.tobytes())
+    os.replace(tmp, GALLERY_THUMBS / name)
+    return {"name": name, "w": tw, "h": th, "ow": ow, "oh": oh}
+
+
+def _replies_by_session() -> dict[int, list[dict]]:
+    """Voice replies recorded on the frame (viewer.py names them reply_<date>_<time>_s<id>)."""
+    out: dict[int, list[dict]] = {}
+    base = MEDIA_ROOT / "recordings"
+    if base.is_dir():
+        with os.scandir(base) as it:
+            for e in it:
+                m = _REPLY_NAME.match(e.name)
+                if m:
+                    d, t = m["d"], m["t"]
+                    out.setdefault(int(m["sid"]), []).append({
+                        "url": f"/media/file/recordings/{e.name}",
+                        "at": f"{d[:4]}-{d[4:6]}-{d[6:]}T{t[:2]}:{t[2:4]}:{t[4:]}",   # local time
+                    })
+    for lst in out.values():
+        lst.sort(key=lambda r: r["at"])
+    return out
+
+
+def _media_url(rel: str) -> str:
+    return "/media/file/" + rel.replace("\\", "/")
+
+
+def gallery_items() -> list[dict]:
+    """Every session on the frame, newest first, with what the gallery and its
+    info panel show. Thumbnails missing so far are made here, once."""
+    _, sessions = db_query("SELECT * FROM sessions ORDER BY created_at DESC, id DESC")
+    _, files = db_query("SELECT session_id, file_path, file_type, is_optimized FROM files ORDER BY id")
+    by_session: dict[int, list] = {}
+    for f in files:
+        by_session.setdefault(f["session_id"], []).append(f)
+    replies = _replies_by_session()
+    thumbs = _thumb_index()
+
+    items = []
+    for s in sessions:
+        fl = by_session.get(s["id"], [])
+        first = lambda kind: next((f for f in fl if f["file_type"] == kind), None)  # noqa: E731
+        image, video, audio = first("IMAGE"), first("VIDEO"), first("AUDIO")
+        visual = video or image
+
+        thumb = full = None
+        if visual:
+            rel = str(visual["file_path"]).replace("\\", "/")
+            name = Path(rel).name
+            original = MEDIA_ROOT / "received" / name           # what was sent, not the 16:9 frame version
+            src = original if (image and not video and original.exists()) else MEDIA_ROOT / rel
+            full = _media_url(f"received/{name}") if src == original else _media_url(rel)
+            key = f"s{s['id']}_{Path(name).stem}"
+            thumb = thumbs.get(key)
+            if thumb is None and src.exists():
+                try:
+                    thumb = _make_thumb(key, src, video=bool(video))
+                except Exception:  # noqa: BLE001
+                    logging.exception("gallery: no thumbnail for session %s", s["id"])
+
+        last_shown = s.get("last_shown_at")
+        items.append({
+            "id": s["id"],
+            "type": s["type"],
+            "status": s["status"],
+            "status_label": STATUS_LABELS.get(s["status"], s["status"]),
+            "sender": s["sender_id"],
+            "created": (str(s["created_at"]).replace(" ", "T") + "Z") if s.get("created_at") else None,  # stored in UTC
+            "source": "Telegram" if s.get("telegram_message_id") else "the web",
+            "thumb": _media_url(f"thumbnails/web/{thumb['name']}") if thumb else None,
+            "w": thumb["w"] if thumb else None, "h": thumb["h"] if thumb else None,
+            "ow": thumb["ow"] if thumb else None, "oh": thumb["oh"] if thumb else None,
+            "full": full,
+            "video": _media_url(str(video["file_path"])) if video else None,
+            "voice": _media_url(str(audio["file_path"])) if audio else None,
+            "replies": replies.get(s["id"], []),
+            "stats": {
+                "shown": s.get("show_count") or 0,
+                "last_shown": datetime.fromtimestamp(last_shown, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ") if last_shown else None,
+                "dwell_s": round(s.get("total_dwell_seconds") or 0),
+                "revisits": s.get("revisit_count") or 0,
+                "voice_replies": s.get("voice_reply_count") or 0,
+                "first_seen": str(s["first_viewed_at"]).replace(" ", "T") if s.get("first_viewed_at") else None,  # local
+            },
+            "files": [{
+                "name": Path(str(f["file_path"])).name,
+                "type": f["file_type"],
+                "size": human_size(_file_size(MEDIA_ROOT / str(f["file_path"]))),
+                "optimized": bool(f["is_optimized"]),
+            } for f in fl],
+        })
+    return items
+
+
+def _file_size(path: Path) -> int:
+    try:
+        return path.stat().st_size
+    except OSError:
+        return 0
+
+
+# ---------------------------------------------------------------------------
+# Uploads
+# ---------------------------------------------------------------------------
+_grouper = None
+_grouper_lock = threading.Lock()
+
+
+def _frame_grouper():
+    """The bot's MessageGrouper, so a photo added here takes exactly the path a
+    photo sent on Telegram takes (naming, processing for the frame, DB rows).
+    Imported on first use: it pulls in OpenCV and starts the grouper's worker."""
+    global _grouper
+    with _grouper_lock:
+        if _grouper is None:
+            # Run as a script, web/ is on sys.path and this file (app.py) would
+            # shadow the project's app/ package (see the scoring import above).
+            web_dir = Path(__file__).resolve().parent
+            sys.path[:] = [p for p in sys.path if Path(p or ".").resolve() != web_dir]
+            if str(PROJECT_ROOT) not in sys.path:
+                sys.path.insert(0, str(PROJECT_ROOT))
+            from app.bot.grouper import MessageGrouper
+            from app.db.database import DatabaseManager
+
+            _grouper = MessageGrouper(
+                received_dir=MEDIA_ROOT / "received",
+                processed_dir=MEDIA_ROOT / "processed",
+                db=DatabaseManager(DB_PATH),
+            )
+    return _grouper
+
+
+def store_upload(upload, sender: str) -> None:
+    """Save one uploaded photo the way Telegram delivers photos (JPEG, at most
+    2560 px, no metadata, so no GPS) and hand it to the frame's pipeline."""
+    import cv2
+
+    received = MEDIA_ROOT / "received"
+    received.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    raw = received / f".upload_{stamp}"
+    upload.save(raw)
+    try:
+        img = cv2.imread(str(raw), cv2.IMREAD_COLOR)    # applies the EXIF rotation
+    finally:
+        raw.unlink(missing_ok=True)
+    if img is None:
+        raise ValueError("Not a photo the frame can read: use JPEG, PNG or WebP "
+                         "(iPhone HEIC photos need converting first).")
+    h, w = img.shape[:2]
+    scale = min(1.0, UPLOAD_MAX_SIDE / max(h, w))
+    if scale < 1.0:
+        img = cv2.resize(img, (round(w * scale), round(h * scale)), interpolation=cv2.INTER_AREA)
+    jpg = received / f"web_{stamp}.jpg"
+    if not cv2.imwrite(str(jpg), img, [cv2.IMWRITE_JPEG_QUALITY, UPLOAD_JPEG_QUALITY]):
+        raise RuntimeError("could not write the JPEG")
+    try:
+        asyncio.run(_frame_grouper().add(
+            user_id=0, temp_path=jpg, extension="jpg", media_type="photo", user_name=sender,
+        ))
+    except BaseException:
+        jpg.unlink(missing_ok=True)     # the grouper moves it on success; don't leave it behind
+        raise
+
+
+# ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
 @app.route("/healthz")
@@ -610,6 +877,36 @@ def healthz():
 
 
 @app.route("/")
+def gallery():
+    return render_template("gallery.html")        # the photos come from /api/gallery
+
+
+@app.get("/api/gallery")
+def gallery_api():
+    return jsonify(items=gallery_items())
+
+
+@app.post("/upload")
+def upload():
+    # A plain cross-site form can't set this header, so another page can't make
+    # a logged-in browser push photos to the frame.
+    if request.headers.get("X-Requested-With") != "amonavision":
+        abort(400)
+    photo = request.files.get("photo")
+    if photo is None or not photo.filename:
+        return jsonify(ok=False, error="No photo received."), 400
+    sender = re.sub(r"\s+", " ", request.form.get("sender") or "").strip()[:32] or "Web"
+    try:
+        store_upload(photo, sender)
+    except ValueError as e:
+        return jsonify(ok=False, error=str(e)), 400
+    except Exception:  # noqa: BLE001
+        logging.exception("upload failed")
+        return jsonify(ok=False, error="The photo could not be saved."), 500
+    return jsonify(ok=True)
+
+
+@app.route("/status")
 def overview():
     return render_template(
         "overview.html",
