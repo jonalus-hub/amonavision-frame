@@ -98,6 +98,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 # Hardware (device.conf + profiles/ + app/hal): loaded and checked once, here,
 # before the settings below, which take their hardware defaults from it.
 HW = hal.get_platform()
+logger.info("Build: %s", HW.label())
 
 # Settings from config.txt; any missing key falls back to its default here.
 def _parse_settings(config: configparser.ConfigParser) -> dict:

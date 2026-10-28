@@ -598,7 +598,8 @@ async def cmd_pi(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         f"💿 SD: *{_format_size(sd_used)} / {_format_size(sd_total)}* ({sd_pct}%)\n"
         f"⏱️ Uptime: *{uptime_str}*\n"
         f"📊 Load: *{load1}  {load5}  {load15}*\n"
-        f"{svc_icon} Service: *{svc}*",
+        f"{svc_icon} Service: *{svc}*\n"
+        f"🏷️ Build: *{hw.label()}*",
         parse_mode="Markdown",
     )
 
@@ -1265,7 +1266,7 @@ def main() -> None:
         raise SystemExit(1)
 
     logger.info("Starting AmonaVision bot …")
-    hal.get_selection()   # validate device.conf / profiles (logs problems only)
+    logger.info("Build: %s", hal.get_selection().label())
     logger.info("Media dir  : %s", MEDIA_RECEIVED)
     logger.info("Log file   : %s", LOG_FILE)
 
