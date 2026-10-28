@@ -4,6 +4,8 @@ import threading
 from pathlib import Path
 import imageio_ffmpeg
 
+from app import hal
+
 logger = logging.getLogger("AmonaVision.video_processor")
 
 # Only one FFmpeg transcode runs at a time so CPU is not stolen from playback.
@@ -13,8 +15,10 @@ def optimize_video(input_path: str | Path, output_path: str | Path) -> bool:
     input_str = str(input_path)
     output_str = str(output_path)
 
-    TARGET_W = 1280
-    TARGET_H = 720
+    # Canvas from the display profile (lcdwiki-10.1-h: 1280x720). The filtergraph
+    # works for any aspect ratio: the background is scaled to cover and cropped,
+    # the foreground letterboxed; only the canvas size changes, not the encode.
+    TARGET_W, TARGET_H = hal.get_selection().display.video_canvas
     BG_W = TARGET_W // 4   # 320 — blur at 1/4 res, then upscale (16× cheaper)
     BG_H = TARGET_H // 4   # 180
     filter_complex = (

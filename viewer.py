@@ -20,6 +20,7 @@ os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
 import pygame
 from app import scoring as scoring_engine
 from app import hal
+from app.hal.layout import compute_layout
 import imageio_ffmpeg
 import subprocess
 
@@ -357,6 +358,12 @@ class ViewerApp:
             flags = pygame.DOUBLEBUF
 
         self.screen = pygame.display.set_mode((self.w, self.h), flags)
+        # UI sizes scaled to this resolution (identical to the original design at 1024x600)
+        self._ui = compute_layout(
+            self.w, self.h,
+            pill_font=SETTINGS.get('overlay_pill_font_size', 42),
+            pill_bottom_margin=SETTINGS.get('overlay_bottom_margin_px', 48),
+        )
         pygame.display.set_caption("AmonaVision Viewer")
         pygame.mouse.set_visible(False)
         pygame.mouse.set_cursor(pygame.cursors.Cursor((8, 8), (0, 0), b'\x00'*8, b'\x00'*8))
@@ -403,13 +410,13 @@ class ViewerApp:
         self._btn_offset_px = int(round(
             SETTINGS.get('overlay_button_offset_cm', 1.0) * 10.0 * (self.w / _pw_mm)
         ))
-        self._overlay_bottom_margin = SETTINGS.get('overlay_bottom_margin_px', 48)
+        self._overlay_bottom_margin = self._ui.pill_bottom_margin
         # The "Play" / "Reply" hints only show for this many seconds
         # after a real button press — during untouched idle slideshow the
         # screen shows the photo alone, nothing else. 0.0 so they start
         # hidden; a KEYDOWN from an actual button sets _last_input_time.
         self._overlay_hide_after = SETTINGS.get('overlay_hide_after_seconds', 10.0)
-        self._overlay_pill_font_size = SETTINGS.get('overlay_pill_font_size', 42)
+        self._overlay_pill_font_size = self._ui.pill_font
         # Tutorial mode: hints stay up permanently, ignoring _overlay_hide_after —
         # for someone still learning the buttons. Toggle in config.txt / the
         # dashboard, not meant to be left on for normal day-to-day use.
@@ -507,22 +514,23 @@ class ViewerApp:
         logger.info("Icons loaded: %s", list(self._icons.keys()))
 
     def _draw_splash(self):
+        ui = self._ui
         cx, cy = self.w // 2, self.h // 2
 
         if self._logo_surf:
-            logo_rect = self._logo_surf.get_rect(center=(cx, cy - 55))
+            logo_rect = self._logo_surf.get_rect(center=(cx, cy - ui.splash_logo_offset_y))
             self.screen.blit(self._logo_surf, logo_rect)
-            spinner_cy = logo_rect.bottom + 55
+            spinner_cy = logo_rect.bottom + ui.splash_spinner_gap
         else:
-            font = self._get_font(80)
+            font = self._get_font(ui.splash_text_font)
             txt = font.render("AmonaVision", True, (220, 220, 220))
-            self.screen.blit(txt, txt.get_rect(center=(cx, cy - 40)))
-            spinner_cy = cy + 40
+            self.screen.blit(txt, txt.get_rect(center=(cx, cy - ui.splash_text_offset_y)))
+            spinner_cy = cy + ui.splash_spinner_offset_y
 
-        r = 30
+        r = ui.spinner_radius
         arc_rect = pygame.Rect(cx - r, spinner_cy - r, r * 2, r * 2)
         a = math.radians(self._spinner_angle)
-        pygame.draw.arc(self.screen, (200, 200, 200), arc_rect, a, a + math.radians(290), 4)
+        pygame.draw.arc(self.screen, (200, 200, 200), arc_rect, a, a + math.radians(290), ui.spinner_width)
         self._spinner_angle = (self._spinner_angle + 6) % 360
 
     def setup_gpio_buttons(self):
@@ -1300,14 +1308,14 @@ class ViewerApp:
         """Pulsing red circle centered on screen with elapsed-seconds counter."""
         elapsed = time.time() - self.recording_start_time
         pulse = abs(math.sin(time.time() * 2.5))           # smooth 0→1→0
-        radius = int(55 + pulse * 20)
+        radius = int(self._ui.rec_radius_base + pulse * self._ui.rec_radius_pulse)
         alpha  = int(160 + pulse * 95)
 
         cx, cy = self.w // 2, self.h // 2
 
         # Red circle on a semi-transparent dark disc so it reads on any background
         bg = pygame.Surface((self.w, self.h), pygame.SRCALPHA)
-        pygame.draw.circle(bg, (0, 0, 0, 80), (cx, cy), radius + 30)
+        pygame.draw.circle(bg, (0, 0, 0, 80), (cx, cy), radius + self._ui.rec_halo)
         self.screen.blit(bg, (0, 0))
 
         sz = radius * 2
@@ -1338,12 +1346,12 @@ class ViewerApp:
             return
 
         cx, cy = self.w // 2, self.h // 2
-        sz = 100
+        sz = self._ui.send_status_size
         if self.send_status == "error":
             bg = pygame.Surface((sz, sz), pygame.SRCALPHA)
-            pygame.draw.circle(bg, (180, 0, 0, 200), (sz // 2, sz // 2), sz // 2 - 2)
+            pygame.draw.circle(bg, (180, 0, 0, 200), (sz // 2, sz // 2), sz // 2 - self._ui.send_status_inset)
             self.screen.blit(bg, (cx - sz // 2, cy - sz // 2))
-            font = self._get_font(64)
+            font = self._get_font(self._ui.send_status_font)
             txt = font.render("!", True, (255, 255, 255))
             self.screen.blit(txt, (cx - txt.get_width() // 2, cy - txt.get_height() // 2))
 
@@ -1351,27 +1359,29 @@ class ViewerApp:
         """Centered mute icon shown for 5 s after pressing play with no voice note."""
         if time.time() - self._no_voice_flash_time > 5.0:
             return
-        sz = 80
+        sz = self._ui.no_voice_size
         scaled = self._scaled_icon('no_voice', sz)
         if not scaled:
             return
         cx, cy = self.w // 2, self.h // 2
-        bg = pygame.Surface((sz + 24, sz + 24), pygame.SRCALPHA)
-        pygame.draw.circle(bg, (0, 0, 0, 180), ((sz + 24) // 2, (sz + 24) // 2), (sz + 24) // 2)
-        self.screen.blit(bg, (cx - (sz + 24) // 2, cy - (sz + 24) // 2))
+        d = sz + self._ui.no_voice_pad
+        bg = pygame.Surface((d, d), pygame.SRCALPHA)
+        pygame.draw.circle(bg, (0, 0, 0, 180), (d // 2, d // 2), d // 2)
+        self.screen.blit(bg, (cx - d // 2, cy - d // 2))
         self.screen.blit(scaled, (cx - sz // 2, cy - sz // 2))
 
     def _draw_pill(self, text: str, center_x: int, center_y: int):
         """A single semi-transparent rounded text label."""
         font = self._get_font(self._overlay_pill_font_size)
         txt = font.render(text, True, (255, 255, 255))
-        pad_x, pad_y = 18, 9
+        pad_x, pad_y = self._ui.pill_pad_x, self._ui.pill_pad_y
+        m = self._ui.pill_screen_margin
         w = txt.get_width() + pad_x * 2
         h = txt.get_height() + pad_y * 2
         x = int(center_x - w / 2)
         y = int(center_y - h / 2)
-        x = max(4, min(x, self.w - w - 4))          # keep on-screen
-        y = max(4, min(y, self.h - h - 4))
+        x = max(m, min(x, self.w - w - m))          # keep on-screen
+        y = max(m, min(y, self.h - h - m))
         pill = pygame.Surface((w, h), pygame.SRCALPHA)
         pygame.draw.rect(pill, (0, 0, 0, 150), (0, 0, w, h), border_radius=h // 2)
         self.screen.blit(pill, (x, y))
@@ -1415,7 +1425,7 @@ class ViewerApp:
             if self.last_viewed_image:
                 self.screen.blit(self.last_viewed_image, (self.last_img_x, self.last_img_y))
             else:
-                font = self._get_font(48)
+                font = self._get_font(self._ui.idle_font)
                 txt = font.render("AmonaVision - Waiting for memories...", True, (150, 150, 150))
                 self.screen.blit(txt, ((self.w - txt.get_width()) // 2, (self.h - txt.get_height()) // 2))
 
@@ -1423,7 +1433,7 @@ class ViewerApp:
             if self.current_image:
                 self.screen.blit(self.current_image, (self.img_x, self.img_y))
             else:
-                font = self._get_font(36)
+                font = self._get_font(self._ui.loading_font)
                 txt = font.render("Loading cover...", True, (100, 100, 100))
                 self.screen.blit(txt, ((self.w - txt.get_width()) // 2, (self.h - txt.get_height()) // 2))
             self._draw_no_voice_badge()
@@ -1434,7 +1444,7 @@ class ViewerApp:
             if self.current_image:
                 self.screen.blit(self.current_image, (self.img_x, self.img_y))
             else:
-                font = self._get_font(36)
+                font = self._get_font(self._ui.recording_text_font)
                 txt = font.render("Recording...", True, (100, 100, 100))
                 self.screen.blit(txt, ((self.w - txt.get_width()) // 2, (self.h - txt.get_height()) // 2))
             self._draw_recording_indicator()
@@ -1496,21 +1506,31 @@ class ViewerApp:
                     self.screen.blit(self.current_image, (self.img_x, self.img_y))
 
                     # Voice/audio playing indicator (centered bottom)
-                    sz = 64
+                    ui = self._ui
+                    sz = ui.voice_icon_size
                     scaled = self._scaled_icon('voice', sz)
                     if scaled:
                         ix = (self.w - sz) // 2
-                        iy = self.h - sz - 20
-                        bg = pygame.Surface((sz + 20, sz + 20), pygame.SRCALPHA)
-                        pygame.draw.circle(bg, (0, 0, 0, 140), ((sz + 20) // 2, (sz + 20) // 2), (sz + 20) // 2)
-                        self.screen.blit(bg, (ix - 10, iy - 10))
+                        iy = self.h - sz - ui.voice_icon_bottom
+                        d = sz + ui.voice_icon_pad
+                        bg = pygame.Surface((d, d), pygame.SRCALPHA)
+                        pygame.draw.circle(bg, (0, 0, 0, 140), (d // 2, d // 2), d // 2)
+                        self.screen.blit(bg, (ix - ui.voice_icon_pad // 2, iy - ui.voice_icon_pad // 2))
                         self.screen.blit(scaled, (ix, iy))
                     else:
-                        mic_x, mic_y = self.w // 2, self.h - 60
-                        pygame.draw.rect(self.screen, (255, 255, 255), (mic_x - 10, mic_y - 20, 20, 30), border_radius=10)
-                        pygame.draw.arc(self.screen, (255, 255, 255), (mic_x - 18, mic_y - 10, 36, 36), 3.14, 0, 3)
-                        pygame.draw.line(self.screen, (255, 255, 255), (mic_x, mic_y + 26), (mic_x, mic_y + 36), 3)
-                        pygame.draw.line(self.screen, (255, 255, 255), (mic_x - 15, mic_y + 36), (mic_x + 15, mic_y + 36), 3)
+                        mic_x, mic_y = self.w // 2, self.h - ui.mic_y_from_bottom
+                        lw = ui.mic_line_width
+                        pygame.draw.rect(self.screen, (255, 255, 255),
+                                         (mic_x + ui.mic_body_dx, mic_y + ui.mic_body_dy, ui.mic_body_w, ui.mic_body_h),
+                                         border_radius=ui.mic_body_radius)
+                        pygame.draw.arc(self.screen, (255, 255, 255),
+                                        (mic_x + ui.mic_arc_dx, mic_y + ui.mic_arc_dy, ui.mic_arc_size, ui.mic_arc_size),
+                                        3.14, 0, lw)
+                        pygame.draw.line(self.screen, (255, 255, 255),
+                                         (mic_x, mic_y + ui.mic_stem_top), (mic_x, mic_y + ui.mic_stem_bottom), lw)
+                        pygame.draw.line(self.screen, (255, 255, 255),
+                                         (mic_x - ui.mic_base_half, mic_y + ui.mic_stem_bottom),
+                                         (mic_x + ui.mic_base_half, mic_y + ui.mic_stem_bottom), lw)
 
                 # No video and no audio → back
                 if not self.audio_path and not self.video_path:

@@ -3,10 +3,14 @@ import cv2
 from pathlib import Path
 import logging
 
+from app import hal
+
 logger = logging.getLogger(__name__)
 
-TARGET_W = 1920
-TARGET_H = 1080
+# Canvas every photo is pre-rendered to, from the display profile
+# (lcdwiki-10.1-h: 1920x1080). Any aspect ratio works: the blurred background
+# is cropped to fill it and the photo is letterboxed inside it.
+TARGET_W, TARGET_H = hal.get_selection().display.image_canvas
 
 def process_image_sync(src: Path, dest: Path):
     """Make an image exactly TARGET_W x TARGET_H, padded with a blurred background."""
