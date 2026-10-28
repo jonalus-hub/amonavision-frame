@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import functools
 import importlib
+import os
 
 from .profiles import DisplayProfile, SbcProfile, Selection, get_selection
 
@@ -10,6 +11,7 @@ from .profiles import DisplayProfile, SbcProfile, Selection, get_selection
 IMPLEMENTATIONS = {
     "rpi4": "sbc_rpi4",
     "radxa": "sbc_radxa",
+    "fake": "fake",
 }
 
 
@@ -83,5 +85,6 @@ class Platform:
 
 @functools.lru_cache(maxsize=1)
 def get_platform() -> Platform:
-    """The process-wide platform for the device.conf selection."""
-    return Platform(get_selection())
+    """The process-wide platform for the device.conf selection.
+    AMONAVISION_HAL_IMPL=fake swaps in simulated hardware (tests, simulator)."""
+    return Platform(get_selection(), os.environ.get("AMONAVISION_HAL_IMPL") or None)

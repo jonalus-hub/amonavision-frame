@@ -44,3 +44,6 @@ app/media/thumbnails/
 # OS
 .DS_Store
 Thumbs.db
+
+# Test runs
+.pytest_cache/

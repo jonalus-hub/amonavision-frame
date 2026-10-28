@@ -1,0 +1,26 @@
+{
+ "_source": "sha256 of every UI state rendered by tests/tools/render_states.py from backup/pre-hal-2026-10-28 (945a592), before the HAL. Font rasterisation depends on the pygame/SDL build, so the test only compares when they match.",
+ "pygame": "2.5.8",
+ "sdl": "2.32.10",
+ "size": [
+  1024,
+  600
+ ],
+ "states": {
+  "hint_play": "1e037bca5aa298372cb1db211d802b740f4682a4f08064de3eec2bdd5e29ef0a",
+  "hint_reply": "ad199603fb215cd60faa83862877ef5785f27ecfd1b956950bd5be5e0a3c9b5d",
+  "idle_image": "1dfb77edb4738283fd9c1d177c5d52b237e400603755f1a5b9d9da4feb889426",
+  "idle_text": "6b3bb2696f669296ee792a14da94096c2e0f8cae9a56dd03b5264c1c125f4576",
+  "loading_cover_badge": "2c35d6f6f4e8426f97fa7890af3dc6f1ba51ede29d4aff60d00583fa4d4c7d3c",
+  "photo_land": "1dfb77edb4738283fd9c1d177c5d52b237e400603755f1a5b9d9da4feb889426",
+  "photo_port": "bd879513ae99df3c7544ff7ce33ae9e245ac0c728580fac7c32f170b3ab8a682",
+  "recording": "4ae91f3a7be42e2c6f23c3af1f070c513233a828313b220c2d789b95e22e0569",
+  "recording_noicon": "9cbb67a4590d75bfacf5872b228e4bb77e63cbc746001a763cfbdd398c5630df",
+  "recording_text": "34bfc40d6b71a1b7a94853a4812e6efa8dadbc2f47b238ce7701f4df26f25678",
+  "send_error": "5c34652f7184f86dc0a154b8e99d05e6d173bf041f7d35b1c3e07711fcbdc096",
+  "splash": "d36d0db0471eb7a07c817cff8705b255b8ecfdf50f90a58a6ef38a2bec402208",
+  "splash_nologo": "844ca72523bba21af74b170cd84dcd40eaef9fcdf0b6f4e7efe8b641739fc1e4",
+  "voice_playing": "75d33e4b81994be153bb38b385456adcd7f1013a52d88253d04d6c8f36eae22a",
+  "voice_playing_noicon": "a75987d3ec940739a15481f71c2d28e11362eaff9b4e02303e5abbe00e844842"
+ }
+}
