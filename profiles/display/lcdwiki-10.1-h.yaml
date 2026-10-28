@@ -1,0 +1,32 @@
+# LCDwiki 10.1inch HDMI Display-H — the production panel (verified in the field).
+#
+# Every value here is the one the code used before the HAL existed. config.txt
+# keys ([Overlay] panel_width_mm) still take precedence over this profile.
+id: lcdwiki-10.1-h
+name: LCDwiki 10.1inch HDMI Display-H
+status: verified
+
+native_size: [1024, 600]
+connector: hdmi
+# Kernel mode forced on the HDMI connector (cmdline.txt video=) and the EDID
+# baked into the initramfs (drm.edid_firmware=), see setup.sh.
+kernel_mode: 1024x600M@60D
+edid_file: config/edid/amona.bin
+# The panel's USB touch controller (QDtech) crashes SDL's kmsdrm evdev probe;
+# usbhid ignores it (cmdline.txt usbhid.quirks=).
+usb_hid_ignore: ["0x0484:0x5750:0x0004"]
+
+# Width of the picture on the panel, edge to edge — places the on-screen
+# "Play" / "Reply" pills above the physical buttons.
+panel_width_mm: 230
+
+audio_out: hdmi            # built-in speakers, fed over HDMI
+
+# Media is pre-rendered to these canvases (blurred padding, letterboxed
+# foreground), then letterboxed again to the screen by the viewer. They are
+# 16:9, not the panel's ~17:10 — that is what the frames show today.
+media_canvas:
+  image: [1920, 1080]
+  video: [1280, 720]
+
+todo: []

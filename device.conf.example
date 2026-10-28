@@ -1,0 +1,15 @@
+# AmonaVision — hardware this frame runs on.
+#
+# Copy to device.conf (same folder) on frames that are NOT the default
+# Raspberry Pi 4 + LCDwiki 10.1" panel. device.conf is per device and is not
+# in git. Without it (or without a key) the defaults below are used, so
+# existing frames need no change.
+#
+# Profiles live in profiles/sbc/*.yaml and profiles/display/*.yaml.
+# Changes apply on the next start of the frame.
+
+[device]
+# rpi4 (default) | radxa-zero3 (not verified yet)
+sbc = rpi4
+# lcdwiki-10.1-h (default) | hgfrtee-12.3 (not verified yet)
+display = lcdwiki-10.1-h

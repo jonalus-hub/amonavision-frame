@@ -1,0 +1,75 @@
+# Radxa ZERO 3 (3W / 3E, Rockchip RK3566) — NOT VERIFIED. No board has been
+# tested yet. Every null below is unknown on purpose: fill it in only from a
+# real board (gpioinfo, /sys/class/drm, pw-dump, /proc/device-tree/model) and
+# move the item out of `todo` when it is confirmed.
+id: radxa-zero3
+name: Radxa ZERO 3
+status: unverified
+implementation: radxa
+
+device_tree_models: []     # TODO: read /proc/device-tree/model on a real board
+
+display:
+  kmsdrm_device_index: null   # TODO: which /dev/dri/cardN drives the HDMI port
+  hdmi_connector: null        # TODO: DRM connector name (ls /sys/class/drm)
+
+buttons:
+  backend: null            # TODO: which GPIO library (gpiozero pin factories target the Pi)
+  gpio_pin_factory: null
+  numbering: null          # TODO: (gpiochip, line) per physical header pin
+  pull_up: null            # TODO: are internal pull-ups available on these lines?
+  bounce_time: null
+  pins:
+    previous: null         # TODO: which header pins / lines
+    play: null
+    record: null
+    next: null
+
+video:
+  decoder: null            # TODO: hardware H.264 decoding under the chosen kernel — unknown
+  threads: null
+
+audio:
+  mixer_frequency: null    # TODO: validate buffer size against real underruns
+  mixer_size: null
+  mixer_channels: null
+  mixer_buffer: null
+  record_samplerate: null
+  record_channels: null
+  hdmi_sink_pattern: null      # TODO: PipeWire node.name of the HDMI output
+  hdmi_pipewire_device: null
+  hdmi_alsa_card: null
+  mic_source_pattern: null     # TODO: PipeWire node.name of the USB microphone
+
+thermal:
+  path: null               # TODO: suggestion only — pick the SoC zone under /sys/class/thermal/
+  throttling: unavailable  # no direct equivalent of the Pi's throttling history
+
+fan:
+  pwm_chip: null           # TODO: is a fan needed at all? which PWM, which overlay?
+  pwm_channel: null
+  period_ns: null
+
+watchdog:
+  device: null             # TODO: SoC watchdog driver and how it is enabled
+  runtime_sec: null
+  reboot_sec: null
+
+panel_power:
+  uhubctl_locations: []    # TODO: can any port be power-switched (uhubctl), or is an external hub needed?
+
+boot:
+  config_txt: null         # TODO: depends on the OS image (Armbian armbianEnv.txt? Radxa OS extlinux?)
+  cmdline_txt: null
+
+todo:
+  - device-tree model string
+  - DRM card index and HDMI connector name
+  - button GPIO lines, pull-ups and library
+  - hardware video decoding
+  - audio sink / microphone names and mixer buffer
+  - thermal zone
+  - fan (if any)
+  - watchdog
+  - panel power switching
+  - boot configuration files

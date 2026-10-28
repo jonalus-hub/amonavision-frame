@@ -45,6 +45,7 @@ from app.bot.grouper import (
     TELEGRAM_FILE_SIZE_LIMIT,
 )
 
+from app import hal
 from app.db.database import DatabaseManager
 from app.usage_log import read_usage
 
@@ -1263,6 +1264,7 @@ def main() -> None:
         raise SystemExit(1)
 
     logger.info("Starting AmonaVision bot …")
+    hal.get_selection()   # validate device.conf / profiles (logs problems only)
     logger.info("Media dir  : %s", MEDIA_RECEIVED)
     logger.info("Log file   : %s", LOG_FILE)
 

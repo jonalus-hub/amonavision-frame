@@ -19,6 +19,7 @@ import configparser
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
 import pygame
 from app import scoring as scoring_engine
+from app import hal
 import imageio_ffmpeg
 import subprocess
 
@@ -84,6 +85,10 @@ logger = logging.getLogger("AmonaVisionViewer")
 # telegram.Bot (voice replies) goes through httpx, which logs every request at
 # INFO with the bot token in the URL. Keep its warnings/errors only.
 logging.getLogger("httpx").setLevel(logging.WARNING)
+
+# Hardware profiles (device.conf + profiles/): loaded and checked once, here,
+# before the settings below.
+HW_SELECTION = hal.get_selection()
 
 # Settings from config.txt; any missing key falls back to its default here.
 def _parse_settings(config: configparser.ConfigParser) -> dict:

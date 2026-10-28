@@ -1,0 +1,79 @@
+# Raspberry Pi 4 Model B — the production board (verified in the field).
+#
+# Every value here is the one the code used before the HAL existed; changing
+# any of them changes the behaviour of the deployed frames. Keys in config.txt
+# ([GPIO] pins, [Audio] samplerate) still take precedence over this profile.
+id: rpi4
+name: Raspberry Pi 4 Model B
+status: verified
+implementation: rpi4
+
+# /proc/device-tree/model must start with one of these, otherwise a warning is
+# logged at start-up (the frame keeps running).
+device_tree_models:
+  - "Raspberry Pi 4"
+
+display:
+  # card0 is the v3d render-only node; card1 is the vc4 KMS display device.
+  kmsdrm_device_index: 1
+  # HDMI0, the micro-HDMI port next to the USB-C power input.
+  hdmi_connector: HDMI-A-1
+
+buttons:
+  backend: gpiozero
+  gpio_pin_factory: lgpio
+  numbering: BCM
+  pull_up: true
+  bounce_time: 0.02        # seconds (Cherry MX bounce < 5 ms)
+  pins:
+    previous: 9            # physical pin 21
+    play: 17               # physical pin 11
+    record: 27             # physical pin 13
+    next: 22               # physical pin 15
+
+video:
+  decoder: h264_v4l2m2m    # BCM2835 hardware H.264 decoder (ffpyplayer "vd")
+  threads: 4
+
+audio:
+  # pygame mixer: a 4096-sample buffer (~85 ms) prevents underruns during
+  # CPU-heavy video decode + blit on the Pi 4.
+  mixer_frequency: 48000
+  mixer_size: -16
+  mixer_channels: 2
+  mixer_buffer: 4096
+  record_samplerate: 48000
+  record_channels: 1
+  # PipeWire / ALSA names of the HDMI0 output and the USB microphone.
+  hdmi_sink_pattern: '^alsa_output\.platform-fef00700\.hdmi\.'
+  hdmi_pipewire_device: alsa_card.platform-fef00700.hdmi
+  hdmi_alsa_card: vc4hdmi0
+  mic_source_pattern: '^alsa_input\.usb-'
+
+thermal:
+  path: /sys/class/thermal/thermal_zone0/temp
+  throttling: unavailable  # vcgencmd get_throttled is not used by the frame
+
+fan:
+  # dtoverlay=pwm,pin=18,func=2 — BCM 18 / physical pin 12, 25 kHz.
+  pwm_chip: /sys/class/pwm/pwmchip0
+  pwm_channel: 0
+  period_ns: 40000
+
+watchdog:
+  # dtparam=watchdog=on (bcm2835-wdt), fed by systemd (setup.sh).
+  device: /dev/watchdog
+  runtime_sec: 15
+  reboot_sec: 120
+
+panel_power:
+  # uhubctl locations that power the panel (all four USB ports are ganged on
+  # the Pi 4). tools/panel-power-cycle.sh switches them off 1-1 then 2, and
+  # back on 2 then 1-1.
+  uhubctl_locations: ["1-1", "2"]
+
+boot:
+  config_txt: /boot/firmware/config.txt
+  cmdline_txt: /boot/firmware/cmdline.txt
+
+todo: []

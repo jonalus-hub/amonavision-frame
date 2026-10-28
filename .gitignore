@@ -9,6 +9,9 @@ venv/
 # Environment secrets
 .env
 
+# Per-device hardware selection (see device.conf.example)
+device.conf
+
 # Claude Code local settings
 .claude/
 

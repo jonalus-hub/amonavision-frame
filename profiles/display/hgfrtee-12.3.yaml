@@ -1,0 +1,31 @@
+# HGFRTEE 12.3" 1920x1280 (15:10), USB-C + mini-HDMI — NOT VERIFIED.
+# Only the native resolution is known. Everything else must be measured on the
+# real panel; move items out of `todo` as they are confirmed.
+id: hgfrtee-12.3
+name: HGFRTEE 12.3inch 1920x1280
+status: unverified
+
+native_size: [1920, 1280]
+connector: mini-hdmi       # TODO: USB-C input too — DisplayPort alt mode?
+kernel_mode: null          # TODO: does it need a forced video= mode?
+edid_file: null            # TODO: dump the EDID (/sys/class/drm/*/edid)
+usb_hid_ignore: []         # TODO: does it expose a touch controller over USB?
+
+panel_width_mm: null       # TODO: measure the visible picture width
+
+audio_out: null            # TODO: speakers? (hdmi / none / usb)
+
+# Proposed canvases matching the 15:10 panel. Not validated: decode and blit
+# cost on the target board are unknown (1080x720 keeps the video pixel count
+# below today's 1280x720).
+media_canvas:
+  image: [1920, 1280]
+  video: [1080, 720]
+
+todo:
+  - connector / USB-C alt mode
+  - kernel mode and EDID
+  - USB touch controller
+  - visible picture width (panel_width_mm)
+  - speakers / audio output
+  - media canvases vs. decode performance
