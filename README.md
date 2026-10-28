@@ -29,6 +29,7 @@ AmonaVision/
 │   │   └── video_processor.py  ← FFmpeg video transcoding
 │   ├── db/
 │   │   └── database.py         ← SQLite database manager
+│   ├── hal/                    ← Hardware abstraction layer (see "Hardware variants")
 │   ├── scoring.py              ← Picks the next photo/video for the slideshow
 │   ├── usage_log.py            ← Button usage log (app/logs/buttons.csv)
 │   ├── logs/                   ← Runtime logs
@@ -48,6 +49,10 @@ AmonaVision/
 │   ├── initramfs-tools/hooks/  ← Puts the EDID into the initramfs
 │   └── wireplumber/            ← Makes HDMI the default audio output
 ├── assets/                     ← Logo (splash + boot splash) and viewer icons
+├── profiles/                   ← Hardware profiles: sbc/*.yaml and display/*.yaml
+├── platform/                   ← Per-board system files (config.txt / cmdline.txt fragments)
+├── docs/hardware/              ← One page per board and per panel (pins, overlays, audio, status)
+├── tests/                      ← pytest suite (python -m pytest tests/)
 ├── viewer.py                   ← Pygame display engine
 ├── start.py                    ← Process supervisor (viewer + bot)
 ├── run.py                      ← Bot entry point
@@ -57,9 +62,79 @@ AmonaVision/
 ├── setup.sh                    ← One-shot device provisioning script
 ├── test_setup.sh               ← Full diagnostic suite (/test, health check)
 ├── config.txt                  ← Display, GPIO, overlay, scoring and reminder settings
+├── device.conf                 ← Which board + panel this frame is (optional, not in git)
+├── VERSION                     ← Release number shown in the logs and in /pi
 ├── requirements.txt
 └── .env                        ← Secrets (not in git — see .env.example)
 ```
+
+---
+
+## Hardware variants
+
+The common code (viewer, bot, dashboard) doesn't know which board or panel it
+runs on. Everything hardware-specific lives in three places:
+
+| Where | What |
+|---|---|
+| `profiles/sbc/<id>.yaml`, `profiles/display/<id>.yaml` | The values: pins, audio device names, decoder, sysfs paths, resolution, media canvases… |
+| `app/hal/` | The code: `base.py` (interfaces), `sbc_<board>.py` (implementations), `fake.py` (simulated, for tests), `layout.py` (UI sizes for any resolution) |
+| `platform/<board>/` | System files the provisioning applies (boot config fragments) |
+
+| Board (`sbc`) | Status | | Panel (`display`) | Status |
+|---|---|---|---|---|
+| `rpi4` — Raspberry Pi 4 | verified | | `lcdwiki-10.1-h` — LCDwiki 10.1" 1024x600 | verified |
+| `radxa-zero3` — Radxa ZERO 3 | skeleton, not verified | | `hgfrtee-12.3` — HGFRTEE 12.3" 1920x1280 | not verified |
+
+Details per variant: [`docs/hardware/`](docs/hardware/).
+
+A frame picks its hardware in `device.conf` (copy `device.conf.example`):
+
+```ini
+[device]
+sbc = rpi4
+display = lcdwiki-10.1-h
+```
+
+Without `device.conf`, or without either key, the frame runs as `rpi4` +
+`lcdwiki-10.1-h` — existing frames need no change. An unknown id is logged as
+an error and the default is used; if `/proc/device-tree/model` doesn't match
+the declared board, a warning is logged and the frame keeps running. Values in
+`config.txt` (`[GPIO]` pins, `[Audio] samplerate`, `[Overlay] panel_width_mm`)
+still override the profiles. The start-up logs and `/pi` show what was loaded,
+e.g. `Build: v1.0.0 · rpi4 · lcdwiki-10.1-h`.
+
+### Adding a variant
+
+1. **Profile.** Copy the closest file in `profiles/sbc/` or `profiles/display/`
+   to `<new-id>.yaml` and set `id:` to the file name. Fill in only what you
+   have measured on the real hardware; leave everything else `null`, list it
+   under `todo:` and keep `status: unverified`.
+2. **Board code** (new SBC only). If no existing implementation fits, add
+   `app/hal/sbc_<family>.py` with a `COMPONENTS` dict implementing the
+   interfaces in `app/hal/base.py` (raise `NotImplementedError` for what you
+   don't know yet), register it in `IMPLEMENTATIONS` in `app/hal/factory.py`,
+   and set `implementation:` in the profile.
+3. **System files.** Put boot/overlay fragments and notes in
+   `platform/<board>/`.
+4. **Documentation.** Add `docs/hardware/<id>.md`: pins, overlays, audio and,
+   for each item, verified or TODO.
+5. **Tests.** New profiles are picked up automatically: every SBC x display
+   combination must start, draw every screen and fit the layout. Run
+   `python -m pytest tests/`.
+6. **Verify on the device**, then set `status: verified` and empty `todo:`
+   (a test enforces that verified profiles have no unknown values).
+
+### Tests
+
+```bash
+pip install -r requirements.txt -r requirements-dev.txt
+python -m pytest tests/
+```
+
+The suite uses simulated hardware (`app/hal/fake.py`) and the SDL dummy
+driver, never touches the frame's database or a real `device.conf`, and
+compares the UI at 1024x600 pixel by pixel with the frame before the HAL.
 
 ---
 
