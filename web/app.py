@@ -76,6 +76,25 @@ try:
 except Exception:  # noqa: BLE001
     scoring_engine = None
 
+# Hardware abstraction layer, loaded by file path for the same reason as
+# scoring.py above. Defensive too: if it can't load, temperature and fan read
+# as unavailable and the rest of the dashboard keeps working.
+try:
+    import importlib.util as _ilu
+    import sys as _sys
+
+    _hal_dir = PROJECT_ROOT / "app" / "hal"
+    _hal_spec = _ilu.spec_from_file_location(
+        "amonavision_hal", _hal_dir / "__init__.py",
+        submodule_search_locations=[str(_hal_dir)],
+    )
+    hal = _ilu.module_from_spec(_hal_spec)
+    _sys.modules["amonavision_hal"] = hal
+    _hal_spec.loader.exec_module(hal)
+    HW = hal.get_platform()
+except Exception:  # noqa: BLE001
+    HW = None
+
 DB_PATH = PROJECT_ROOT / "app" / "db" / "amonavision.db"
 MEDIA_ROOT = PROJECT_ROOT / "app" / "media"
 MEDIA_DIRS = ("received", "processed", "recordings", "thumbnails")
@@ -332,8 +351,11 @@ def system_stats() -> dict:
     s: dict = {}
 
     # CPU temp
-    raw = read_first_line("/sys/class/thermal/thermal_zone0/temp", "0")
-    s["temp_c"] = round(int(raw) / 1000, 1) if raw.isdigit() else None
+    try:
+        temp = HW.thermal.read_celsius()
+    except Exception:  # noqa: BLE001
+        temp = None
+    s["temp_c"] = round(temp, 1) if temp is not None else None
 
     # RAM
     mem = {}
@@ -376,9 +398,6 @@ def system_stats() -> dict:
     return s
 
 
-_PWM_FAN = Path("/sys/class/pwm/pwmchip0/pwm0")
-
-
 def fan_speed() -> dict:
     """Current PWM fan duty cycle, read straight from the same sysfs files
     fan_control.py itself drives — a percentage, not RPM: this is a 3-wire
@@ -386,9 +405,10 @@ def fan_speed() -> dict:
     "speed" signal there is. World-readable (0644, group gpio), no root
     needed."""
     try:
-        period = int((_PWM_FAN / "period").read_text().strip())
-        duty = int((_PWM_FAN / "duty_cycle").read_text().strip())
-        enabled = (_PWM_FAN / "enable").read_text().strip() == "1"
+        pwm = HW.fan.read_pwm()
+        period, duty, enabled = pwm["period"], pwm["duty"], pwm["enabled"]
+        if period is None or duty is None or enabled is None:
+            raise ValueError("fan PWM unreadable")
         pct = round(duty / period * 100) if period and enabled else 0
         return {"ok": True, "enabled": enabled, "pct": pct}
     except Exception:

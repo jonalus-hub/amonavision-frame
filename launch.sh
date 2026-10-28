@@ -5,6 +5,12 @@ cd "$(dirname "$0")"
 
 source venv/bin/activate
 
+# Board-specific names (HDMI connector, PipeWire node patterns) from the
+# hardware profile (device.conf + profiles/). The literals below are the rpi4
+# values, used if the HAL can't run.
+HAL_ENV=$(python3 -m app.hal env 2>/dev/null) && eval "$HAL_ENV"
+HDMI_CONNECTOR="${AV_HDMI_CONNECTOR:-HDMI-A-1}"
+
 # Re-present the HDMI signal once per boot, before the viewer takes the display.
 # The panel sometimes misses a signal that was already running when it finished
 # booting and shows "No signal" until the cable is re-plugged; output off/on
@@ -14,7 +20,7 @@ source venv/bin/activate
 RESYNC_MARK="${XDG_RUNTIME_DIR:-/run/user/1000}/amona-hdmi-resynced"
 if [[ ! -e "$RESYNC_MARK" ]]; then
     while (( $(cut -d. -f1 /proc/uptime) < 20 )); do sleep 1; done
-    python3 tools/hdmi-resync.py HDMI-A-1 3 && touch "$RESYNC_MARK"
+    python3 tools/hdmi-resync.py "$HDMI_CONNECTOR" 3 && touch "$RESYNC_MARK"
 fi
 
 # Route audio: HDMI out, USB mic in
@@ -34,8 +40,8 @@ for o in json.load(sys.stdin):
         break
 ' "$1" "$2" 2>/dev/null
 }
-HDMI_SINK_RE='^alsa_output\.platform-fef00700\.hdmi\.'   # HDMI0 = HDMI-A-1 = the panel
-USB_MIC_RE='^alsa_input\.usb-'
+HDMI_SINK_RE="${AV_HDMI_SINK_RE:-^alsa_output\.platform-fef00700\.hdmi\.}"   # rpi4: HDMI0 = HDMI-A-1 = the panel
+USB_MIC_RE="${AV_MIC_SOURCE_RE:-^alsa_input\.usb-}"
 
 # The HDMI sink can disappear from PipeWire if the display re-reads its EDID
 # (e.g. after standby). Give WirePlumber a few seconds at boot, then restart

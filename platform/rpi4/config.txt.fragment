@@ -1,0 +1,17 @@
+# /boot/firmware/config.txt — lines setup.sh (Step 3 display, Step 4 PWM fan + watchdog) ensures on a
+# Raspberry Pi 4 driving the LCDwiki 10.1" panel. REFERENCE COPY: setup.sh
+# still writes these itself; tests/test_platform_files.py checks both agree.
+# Read the "DO NOT IMPROVE" note in setup.sh Step 3 before changing anything.
+
+# Display (verified with lcdwiki-10.1-h; port-suffixed or hdmi_cvt/hdmi_mode
+# variants broke the display or hung the boot)
+hdmi_force_hotplug=1
+hdmi_force_edid_audio=1
+dtoverlay=vc4-kms-v3d
+display_auto_detect=0
+
+# Fan: PWM on BCM 18 / physical pin 12 (fan_control.py)
+dtoverlay=pwm,pin=18,func=2
+
+# Hardware watchdog (bcm2835-wdt), fed by systemd — see system.conf.fragment
+dtparam=watchdog=on

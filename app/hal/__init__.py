@@ -4,6 +4,8 @@ Common code asks this package for anything board- or panel-specific instead of
 hard-coding it. The board and panel come from device.conf (see profiles.py);
 without one, the frame runs as rpi4 + lcdwiki-10.1-h, as it always has.
 """
+from .base import Action, ThrottleInfo  # noqa: F401
+from .factory import Platform, get_platform  # noqa: F401
 from .profiles import (  # noqa: F401
     DEFAULT_DISPLAY,
     DEFAULT_SBC,

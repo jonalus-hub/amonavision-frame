@@ -1,0 +1,4 @@
+# /etc/systemd/system.conf — watchdog keys setup.sh (Step 4, hardware watchdog) sets.
+# REFERENCE COPY: setup.sh still writes these.
+RuntimeWatchdogSec=15
+RebootWatchdogSec=2min

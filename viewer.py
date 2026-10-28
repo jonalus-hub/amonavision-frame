@@ -56,6 +56,14 @@ USAGE_BUTTONS = {
     pygame.K_r: "record",
 }
 
+# Physical button action -> the key it injects (the keyboard works the same way).
+ACTION_KEYS = {
+    hal.Action.PREVIOUS: pygame.K_LEFT,
+    hal.Action.PLAY: pygame.K_SPACE,
+    hal.Action.RECORD: pygame.K_r,
+    hal.Action.NEXT: pygame.K_RIGHT,
+}
+
 # Voice replies shorter than this are discarded instead of sent: an accidental
 # tap on the record button (or a ghost press on its GPIO) otherwise sends an
 # empty voice note to the family (2026-10-02 00:13, 0.1 s).
@@ -86,9 +94,9 @@ logger = logging.getLogger("AmonaVisionViewer")
 # INFO with the bot token in the URL. Keep its warnings/errors only.
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
-# Hardware profiles (device.conf + profiles/): loaded and checked once, here,
-# before the settings below.
-HW_SELECTION = hal.get_selection()
+# Hardware (device.conf + profiles/ + app/hal): loaded and checked once, here,
+# before the settings below, which take their hardware defaults from it.
+HW = hal.get_platform()
 
 # Settings from config.txt; any missing key falls back to its default here.
 def _parse_settings(config: configparser.ConfigParser) -> dict:
@@ -98,12 +106,13 @@ def _parse_settings(config: configparser.ConfigParser) -> dict:
         'window_height':      config.getint    ('Viewer', 'window_height',      fallback=720),
         'slideshow_interval': config.getfloat  ('Viewer', 'slideshow_interval', fallback=10.0),
 
-        'pin_previous':   config.getint('GPIO', 'pin_previous',   fallback=9),
-        'pin_play_pause': config.getint('GPIO', 'pin_play_pause', fallback=17),
-        'pin_record':     config.getint('GPIO', 'pin_record',     fallback=27),
-        'pin_next':       config.getint('GPIO', 'pin_next',       fallback=22),
+        # Hardware defaults come from the profiles; config.txt still wins.
+        'pin_previous':   config.getint('GPIO', 'pin_previous',   fallback=HW.sbc.button_pins['previous']),
+        'pin_play_pause': config.getint('GPIO', 'pin_play_pause', fallback=HW.sbc.button_pins['play']),
+        'pin_record':     config.getint('GPIO', 'pin_record',     fallback=HW.sbc.button_pins['record']),
+        'pin_next':       config.getint('GPIO', 'pin_next',       fallback=HW.sbc.button_pins['next']),
 
-        'samplerate':    config.getint    ('Audio',  'samplerate',    fallback=48000),
+        'samplerate':    config.getint    ('Audio',  'samplerate',    fallback=HW.audio.record_samplerate()),
         'daily_restart': config.getboolean('System', 'daily_restart', fallback=True),
 
         'scoring_enabled':                  config.getboolean('Scoring', 'enabled',                          fallback=True),
@@ -119,7 +128,7 @@ def _parse_settings(config: configparser.ConfigParser) -> dict:
         'implicit_dwell_threshold_seconds': config.getfloat  ('Scoring', 'implicit_dwell_threshold_seconds', fallback=30.0),
 
         'overlay_enabled':            config.getboolean('Overlay', 'enabled',            fallback=True),
-        'overlay_panel_width_mm':     config.getfloat  ('Overlay', 'panel_width_mm',     fallback=230.0),
+        'overlay_panel_width_mm':     config.getfloat  ('Overlay', 'panel_width_mm',     fallback=HW.display.panel_width_mm or 230.0),
         'overlay_button_offset_cm':   config.getfloat  ('Overlay', 'button_offset_cm',   fallback=1.0),
         'overlay_bottom_margin_px':   config.getint    ('Overlay', 'bottom_margin_px',   fallback=48),
         'overlay_hide_after_seconds': config.getfloat  ('Overlay', 'hide_after_seconds', fallback=10.0),
@@ -160,15 +169,8 @@ except Exception as e:
     logger.warning(f"Audio recording NOT available. Error: {e}. Make sure sounddevice and soundfile are installed.")
 
 
-# gpiozero drives the physical buttons (the recommended library on Pi OS
-# Bookworm+, uses lgpio underneath)
-try:
-    from gpiozero import Button
-    GPIO_AVAILABLE = True
-    logger.info("gpiozero library available. Hardware buttons enabled.")
-except (ImportError, Exception) as e:
-    GPIO_AVAILABLE = False
-    logger.warning("gpiozero library NOT available (%s). Hardware buttons disabled.", e)
+# Physical buttons: the HAL loads the board's GPIO backend (gpiozero on rpi4)
+GPIO_AVAILABLE = HW.buttons.available
 
 
 # ---------------------------------------------------------------------------
@@ -329,14 +331,14 @@ class ViewerApp:
         # Large buffer (4096 samples = ~85ms at 48kHz) prevents underruns during
         # CPU-heavy video frame decode+blit on Pi 4. pre_init must come before
         # pygame.init(), which opens the mixer itself — any later init() is a no-op.
-        pygame.mixer.pre_init(frequency=48000, size=-16, channels=2, buffer=4096)
+        pygame.mixer.pre_init(**HW.audio.mixer_params())
         pygame.init()
         try:
             pygame.display.init()
         except pygame.error as e:
             raise RuntimeError(f"Display init failed (SDL_VIDEODRIVER={os.environ.get('SDL_VIDEODRIVER','unset')}): {e}") from e
         try:
-            pygame.mixer.init(frequency=48000, size=-16, channels=2, buffer=4096)
+            pygame.mixer.init(**HW.audio.mixer_params())
             self._audio_available = True
         except pygame.error as e:
             logger.warning("Audio init failed: %s. Running without audio.", e)
@@ -466,7 +468,7 @@ class ViewerApp:
         self.recorded_frames = []     # Captured audio frames
         self.recording_samplerate = SETTINGS['samplerate']
 
-        self.recording_channels = 1
+        self.recording_channels = HW.audio.record_channels()
         self.current_recording_path = None  # Path of the recorded OGG
 
         # --- Send feedback state ---
@@ -475,7 +477,6 @@ class ViewerApp:
 
         # --- GPIO Buttons Setup ---
         self._gpio_queue = queue.Queue()  # Thread-safe queue for GPIO → main-thread events
-        self._gpio_buttons = []  # Keep the Button objects referenced so they aren't destroyed
         if GPIO_AVAILABLE:
             self.setup_gpio_buttons()
 
@@ -525,25 +526,22 @@ class ViewerApp:
         self._spinner_angle = (self._spinner_angle + 6) % 360
 
     def setup_gpio_buttons(self):
-        """Set up the GPIO buttons with gpiozero (Pi OS Bookworm+)."""
+        """Set up the physical buttons through the HAL (gpiozero on rpi4)."""
         try:
-            # GPIO (BCM) pin -> Pygame key, from config.txt
-            gpio_mapping = {
-                SETTINGS['pin_previous']: pygame.K_LEFT,
-                SETTINGS['pin_play_pause']: pygame.K_SPACE,
-                SETTINGS['pin_record']: pygame.K_r,
-                SETTINGS['pin_next']: pygame.K_RIGHT,
-            }
+            # Pin -> Pygame key; pins from config.txt, else the SBC profile
+            pin_actions = HW.buttons.pin_actions({
+                hal.Action.PREVIOUS.value: SETTINGS['pin_previous'],
+                hal.Action.PLAY.value: SETTINGS['pin_play_pause'],
+                hal.Action.RECORD.value: SETTINGS['pin_record'],
+                hal.Action.NEXT.value: SETTINGS['pin_next'],
+            })
+            gpio_mapping = {pin: ACTION_KEYS[action] for pin, action in pin_actions.items()}
 
             configured_count = 0
             for pin, key in gpio_mapping.items():
                 try:
-                    # gpiozero.Button enables the internal pull-up and detects the press (falling edge).
-                    # bounce_time in seconds (Cherry MX: <5ms bounce; 20ms is safe and responsive)
-                    btn = Button(pin, pull_up=True, bounce_time=0.02)
-
-                    # when_pressed runs in a gpiozero thread: queue the key so the
-                    # main Pygame thread injects it as an event.
+                    # The callbacks run in the backend's thread: queue the key so
+                    # the main Pygame thread injects it as an event.
                     def on_press(k=key, p=pin):
                         logger.info("GPIO: Button on pin %d pressed -> Enqueuing key (%s)", p, pygame.key.name(k))
                         self._gpio_queue.put((pygame.KEYDOWN, k))
@@ -553,9 +551,7 @@ class ViewerApp:
                         self._gpio_queue.put((pygame.KEYUP, k))
                         self._wake_main_loop()
 
-                    btn.when_pressed = on_press
-                    btn.when_released = on_release
-                    self._gpio_buttons.append(btn)  # keep it alive
+                    HW.buttons.attach(pin, on_press, on_release)
                     configured_count += 1
                     logger.info("GPIO pin %d configured OK (-> %s)", pin, pygame.key.name(key))
                 except Exception as e:
@@ -1197,12 +1193,7 @@ class ViewerApp:
 
         if self.video_path:
             has_external_voice = bool(self.audio_path)
-            ff_opts = {
-                'an': has_external_voice,
-                'paused': False,
-                'vd': 'h264_v4l2m2m',  # BCM2835 hardware H.264 decoder on Pi 4
-                'threads': '4',
-            }
+            ff_opts = HW.video.ff_opts(has_external_voice)
             try:
                 self._close_video_player()
                 self._video_surf = None  # Reset pre-allocated surface for new video
@@ -1244,7 +1235,7 @@ class ViewerApp:
                     logger.warning("Mixer not initialized — attempting re-init")
                     try:
                         pygame.mixer.quit()
-                        pygame.mixer.init(frequency=48000, size=-16, channels=2, buffer=4096)
+                        pygame.mixer.init(**HW.audio.mixer_params())
                         self._audio_available = True
                         logger.info("Mixer re-initialized successfully")
                     except pygame.error as reinit_err:
@@ -1758,8 +1749,7 @@ class ViewerApp:
                 self.cache.cleanup()
             if GPIO_AVAILABLE:
                 try:
-                    for btn in self._gpio_buttons:
-                        btn.close()
+                    HW.buttons.close()
                     logger.info("GPIO buttons closed successfully.")
                 except Exception as e:
                     logger.error("Error closing GPIO buttons: %s", e)

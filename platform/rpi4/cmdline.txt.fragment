@@ -1,0 +1,15 @@
+# /boot/firmware/cmdline.txt — parameters setup.sh (Step 3b) appends to the
+# single kernel command line. REFERENCE COPY: setup.sh still writes these.
+# One parameter per line here; on the device they are space-separated.
+
+# Panel-specific (lcdwiki-10.1-h): forced mode + EDID on HDMI-A-1, and the
+# panel's USB touch controller ignored (it crashes SDL's kmsdrm evdev probe)
+video=HDMI-A-1:1024x600M@60D
+drm.edid_firmware=HDMI-A-1:edid/amona.bin
+usbhid.quirks=0x0484:0x5750:0x0004
+
+# Board / OS
+usbcore.autosuspend=-1
+consoleblank=0
+cgroup_enable=memory
+cgroup_memory=1

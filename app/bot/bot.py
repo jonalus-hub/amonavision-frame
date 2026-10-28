@@ -518,9 +518,12 @@ async def cmd_pi(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         except Exception:
             return "?"
 
+    hw = hal.get_platform()
+
     # CPU temperature
-    temp_raw = _read("/sys/class/thermal/thermal_zone0/temp", "0")
-    temp_c = int(temp_raw) / 1000 if temp_raw.isdigit() else 0.0
+    temp_c = hw.thermal.read_celsius()
+    if temp_c is None:
+        temp_c = 0.0
     temp_icon = "🔥" if temp_c > 70 else "🌡️"
 
     # CPU usage — delta-sample /proc/stat (aggregate of all cores) over a short
@@ -545,12 +548,10 @@ async def cmd_pi(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     cpu_str = f"{cpu_pct:.0f}%" if cpu_pct is not None else "?"
 
     # Fan speed (PWM duty cycle as % of period — see fan_control.py)
-    PWM_PIN = "/sys/class/pwm/pwmchip0/pwm0"
-    duty_raw = _read(f"{PWM_PIN}/duty_cycle", "")
-    period_raw = _read(f"{PWM_PIN}/period", "")
+    pwm = hw.fan.read_pwm()
     fan_pct = None
-    if duty_raw.isdigit() and period_raw.isdigit() and int(period_raw) > 0:
-        fan_pct = int(duty_raw) / int(period_raw) * 100
+    if pwm["duty"] is not None and pwm["period"] is not None and pwm["period"] > 0:
+        fan_pct = pwm["duty"] / pwm["period"] * 100
     fan_str = f"{fan_pct:.0f}%" if fan_pct is not None else "?"
 
     # RAM  (/proc/meminfo in kB)

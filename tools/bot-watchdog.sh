@@ -427,9 +427,16 @@ fi
 # HDMI sink, cycle the card's profile off -> output:hdmi-stereo so WirePlumber
 # creates the sink again, then make it the default so streams move back to it.
 # No service restart. Local-only, so it runs before the internet guard.
+# Card / node names from the hardware profile; the literals are the rpi4 values,
+# used if the HAL can't run (-B: no root-owned __pycache__ in the app dir).
+HAL_ENV=$(cd "$APP_DIR" && python3 -B -m app.hal env 2>/dev/null) && eval "$HAL_ENV"
+HDMI_ALSA_CARD="${AV_HDMI_ALSA_CARD:-vc4hdmi0}"
+HDMI_PW_DEVICE="${AV_HDMI_PW_DEVICE:-alsa_card.platform-fef00700.hdmi}"
+HDMI_SINK_RE="${AV_HDMI_SINK_RE:-^alsa_output\.platform-fef00700\.hdmi\.}"
 hdmi_audio_state() {   # -> "<device id> <off idx> <hdmi-stereo idx> <sink id or ->"
     sudo -u av XDG_RUNTIME_DIR=/run/user/1000 pw-dump 2>/dev/null | python3 -c '
-import json, sys
+import json, re, sys
+dev_name, sink_re = sys.argv[1], re.compile(sys.argv[2])
 dev = off = hdmi = ""; sink = "-"
 try:
     objs = json.load(sys.stdin)
@@ -438,16 +445,16 @@ except Exception:
 for o in objs:
     info = o.get("info") or {}
     p = info.get("props") or {}
-    if p.get("device.name") == "alsa_card.platform-fef00700.hdmi":
+    if p.get("device.name") == dev_name:
         dev = o["id"]
         for e in (info.get("params") or {}).get("EnumProfile", []):
             if e.get("name") == "off": off = e.get("index")
             if e.get("name") == "output:hdmi-stereo": hdmi = e.get("index")
-    if p.get("media.class") == "Audio/Sink" and str(p.get("node.name", "")).startswith("alsa_output.platform-fef00700.hdmi."):
+    if p.get("media.class") == "Audio/Sink" and sink_re.search(str(p.get("node.name", ""))):
         sink = o["id"]
-print(dev, off, hdmi, sink)' 2>/dev/null
+print(dev, off, hdmi, sink)' "$HDMI_PW_DEVICE" "$HDMI_SINK_RE" 2>/dev/null
 }
-if amixer -c vc4hdmi0 cget iface=CARD,name='HDMI Jack' 2>/dev/null | grep -q 'values=on'; then
+if amixer -c "$HDMI_ALSA_CARD" cget iface=CARD,name='HDMI Jack' 2>/dev/null | grep -q 'values=on'; then
     read -r HA_DEV HA_OFF HA_HDMI HA_SINK <<<"$(hdmi_audio_state)"
     if [[ -n "${HA_DEV:-}" && -n "${HA_OFF:-}" && -n "${HA_HDMI:-}" && "${HA_SINK:-}" == "-" ]]; then
         sudo -u av XDG_RUNTIME_DIR=/run/user/1000 wpctl set-profile "$HA_DEV" "$HA_OFF" 2>/dev/null
