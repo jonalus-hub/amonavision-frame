@@ -17,6 +17,7 @@
   header a:hover { background: #262c36; color: #fff; }
   header a.on { background: #2f6feb33; color: #7cb3ff; }
   main { padding: 1rem; max-width: 1200px; margin: 0 auto; }
+  main.wide { max-width: none; }
   h1 { font-size: 1.2rem; margin: .2rem 0 1rem; }
   h2 { font-size: 1rem; margin: 1.4rem 0 .6rem; color: #fff; }
   table { border-collapse: collapse; width: 100%; margin: .5rem 0 1rem; font-size: 13px; }
@@ -57,13 +58,14 @@
 <header>
   <span class="brand">AmonaVision</span>
   {% set p = request.path %}
-  <a href="/"        class="{{ 'on' if p == '/' }}">Overview</a>
+  <a href="/"        class="{{ 'on' if p == '/' }}">Photos</a>
+  <a href="/status"  class="{{ 'on' if p.startswith('/status') }}">Status</a>
   <a href="/media"   class="{{ 'on' if p.startswith('/media') }}">Media</a>
   <a href="/db"      class="{{ 'on' if p.startswith('/db') }}">Database</a>
   <a href="/config"  class="{{ 'on' if p.startswith('/config') }}">Config</a>
   <a href="/debug"   class="{{ 'on' if p.startswith('/debug') }}">Debug</a>
 </header>
-<main>
+<main class="{% block main_class %}{% endblock %}">
   {% with msgs = get_flashed_messages(with_categories=true) %}
     {% for cat, msg in msgs %}
       <div class="flash {{ cat }}">{{ msg }}</div>
