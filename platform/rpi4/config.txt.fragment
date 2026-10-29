@@ -4,7 +4,8 @@
 # Read the "DO NOT IMPROVE" note in setup.sh Step 3 before changing anything.
 
 # Display (verified with lcdwiki-10.1-h; port-suffixed or hdmi_cvt/hdmi_mode
-# variants broke the display or hung the boot)
+# variants broke the display or hung the boot). The two hdmi_force_* lines are
+# written only for a panel_reset display profile; a standard panel skips them.
 hdmi_force_hotplug=1
 hdmi_force_edid_audio=1
 dtoverlay=vc4-kms-v3d

@@ -33,7 +33,9 @@
 
 set -uo pipefail
 
-APP_DIR=/home/av/AmonaVision
+APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"   # repo root, whatever the user/path
+APP_USER="$(stat -c %U "$APP_DIR")"              # frame runs as whoever owns the checkout
+APP_RUID="$(id -u "$APP_USER" 2>/dev/null || echo 1000)"
 ENV_FILE="$APP_DIR/.env"
 APP_LOG="$APP_DIR/app/logs/app.log"
 STATE_FILE=/var/lib/amonavision/watchdog_state
@@ -434,7 +436,7 @@ HDMI_ALSA_CARD="${AV_HDMI_ALSA_CARD:-vc4hdmi0}"
 HDMI_PW_DEVICE="${AV_HDMI_PW_DEVICE:-alsa_card.platform-fef00700.hdmi}"
 HDMI_SINK_RE="${AV_HDMI_SINK_RE:-^alsa_output\.platform-fef00700\.hdmi\.}"
 hdmi_audio_state() {   # -> "<device id> <off idx> <hdmi-stereo idx> <sink id or ->"
-    sudo -u av XDG_RUNTIME_DIR=/run/user/1000 pw-dump 2>/dev/null | python3 -c '
+    sudo -u "$APP_USER" XDG_RUNTIME_DIR=/run/user/$APP_RUID pw-dump 2>/dev/null | python3 -c '
 import json, re, sys
 dev_name, sink_re = sys.argv[1], re.compile(sys.argv[2])
 dev = off = hdmi = ""; sink = "-"
@@ -457,13 +459,13 @@ print(dev, off, hdmi, sink)' "$HDMI_PW_DEVICE" "$HDMI_SINK_RE" 2>/dev/null
 if amixer -c "$HDMI_ALSA_CARD" cget iface=CARD,name='HDMI Jack' 2>/dev/null | grep -q 'values=on'; then
     read -r HA_DEV HA_OFF HA_HDMI HA_SINK <<<"$(hdmi_audio_state)"
     if [[ -n "${HA_DEV:-}" && -n "${HA_OFF:-}" && -n "${HA_HDMI:-}" && "${HA_SINK:-}" == "-" ]]; then
-        sudo -u av XDG_RUNTIME_DIR=/run/user/1000 wpctl set-profile "$HA_DEV" "$HA_OFF" 2>/dev/null
+        sudo -u "$APP_USER" XDG_RUNTIME_DIR=/run/user/$APP_RUID wpctl set-profile "$HA_DEV" "$HA_OFF" 2>/dev/null
         sleep 2
-        sudo -u av XDG_RUNTIME_DIR=/run/user/1000 wpctl set-profile "$HA_DEV" "$HA_HDMI" 2>/dev/null
+        sudo -u "$APP_USER" XDG_RUNTIME_DIR=/run/user/$APP_RUID wpctl set-profile "$HA_DEV" "$HA_HDMI" 2>/dev/null
         sleep 3
         read -r _ _ _ HA_SINK <<<"$(hdmi_audio_state)"
         if [[ -n "${HA_SINK:-}" && "$HA_SINK" != "-" ]]; then
-            sudo -u av XDG_RUNTIME_DIR=/run/user/1000 wpctl set-default "$HA_SINK" 2>/dev/null
+            sudo -u "$APP_USER" XDG_RUNTIME_DIR=/run/user/$APP_RUID wpctl set-default "$HA_SINK" 2>/dev/null
             logger -t amonavision-watchdog "HDMI audio sink was missing with the panel connected -- recreated it (profile off -> output:hdmi-stereo) and made it the default"
         else
             logger -t amonavision-watchdog "HDMI audio sink missing with the panel connected and could not be recreated -- the 3h health check reports it"

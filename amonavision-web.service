@@ -7,11 +7,11 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=av
-Group=av
-WorkingDirectory=/home/av/AmonaVision
+User=__APP_USER__
+Group=__APP_USER__
+WorkingDirectory=__APP_DIR__
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/home/av/AmonaVision/venv/bin/python3 /home/av/AmonaVision/web/app.py
+ExecStart=__APP_DIR__/venv/bin/python3 __APP_DIR__/web/app.py
 Restart=always
 RestartSec=10
 # The frame is Nice=10 -> it always wins the CPU over this.

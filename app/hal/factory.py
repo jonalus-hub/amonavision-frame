@@ -78,6 +78,12 @@ class Platform:
             "AV_HDMI_CONNECTOR": self.sbc.hdmi_connector,
             "AV_KMSDRM_DEVICE_INDEX": self.sbc.kmsdrm_device_index,
             "AV_PANEL_UHUBCTL_LOCATIONS": " ".join(self.sbc.panel_power.get("uhubctl_locations") or []) or None,
+            # Whether this panel needs the LCDwiki-style hand-holding: its mode +
+            # EDID forced at boot and the signal re-present / USB power-cycle
+            # rescue. Always emitted ("1"/"0") so launch.sh, the panel scripts and
+            # setup.sh can branch on it; "0" means the panel negotiates HDMI
+            # normally and setup.sh forces nothing and installs no reset units.
+            "AV_PANEL_RESET": "1" if self.display.panel_reset else "0",
         }
         env.update(self.audio.shell_env())
         return {k: (None if v is None else str(v)) for k, v in env.items()}

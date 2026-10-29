@@ -46,6 +46,7 @@ LCDWIKI_10_1_H = {
     "id": "lcdwiki-10.1-h",
     "name": "LCDwiki 10.1inch HDMI Display-H",
     "status": "verified",
+    "panel_reset": True,
     "native_size": [1024, 600],
     "connector": "hdmi",
     "kernel_mode": "1024x600M@60D",

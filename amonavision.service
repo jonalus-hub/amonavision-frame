@@ -13,9 +13,9 @@ StartLimitBurst=5
 
 [Service]
 Type=simple
-User=av
-Group=av
-WorkingDirectory=/home/av/AmonaVision
+User=__APP_USER__
+Group=__APP_USER__
+WorkingDirectory=__APP_DIR__
 Environment=SDL_VIDEODRIVER=kmsdrm
 # card0 is the v3d render-only GPU node (no display capability); card1 is the
 # actual vc4 KMS display device. Without this, SDL's auto-detection tries
@@ -41,7 +41,7 @@ TimeoutStopSec=15
 # Invoked via bash (not as a bare executable) so a deploy that drops the +x
 # bit can't 203/EXEC the service into a StartLimit failure and take the frame
 # down. launch.sh still `cd`s to its own dir correctly ($0 is the full path).
-ExecStart=/bin/bash /home/av/AmonaVision/launch.sh
+ExecStart=/bin/bash __APP_DIR__/launch.sh
 Restart=always
 RestartSec=15
 # Lower priority so SSH and system services always get CPU first

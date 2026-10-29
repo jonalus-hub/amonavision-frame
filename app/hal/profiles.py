@@ -68,6 +68,7 @@ class DisplayProfile:
     id: str
     name: str
     status: str
+    panel_reset: bool
     native_size: tuple[int, int]
     connector: str | None
     kernel_mode: str | None
@@ -88,6 +89,7 @@ class DisplayProfile:
             id=str(_req(data, "id", where)),
             name=str(_req(data, "name", where)),
             status=str(_req(data, "status", where)),
+            panel_reset=bool(_req(data, "panel_reset", where)),
             native_size=_size(_req(data, "native_size", where), f"{where} native_size"),
             connector=_req(data, "connector", where),
             kernel_mode=_req(data, "kernel_mode", where),

@@ -22,11 +22,13 @@
 
 set -uo pipefail
 
-APP_DIR=/home/av/AmonaVision
+APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"   # repo root, whatever the user/path
+APP_USER="$(stat -c %U "$APP_DIR")"
+APP_RUID="$(id -u "$APP_USER" 2>/dev/null || echo 1000)"
 ENV_FILE="$APP_DIR/.env"
 PANEL_FLAG=/tmp/amonavision_panel_reset      # written by the bot (/screen)
 RESTART_FLAG=/tmp/amonavision_restart        # viewer's soft-restart flag (/restart)
-RESYNC_MARK=/run/user/1000/amona-hdmi-resynced
+RESYNC_MARK=/run/user/$APP_RUID/amona-hdmi-resynced
 OFF_SECONDS=10
 
 log() { logger -t amonavision-panel-reset "$*"; echo "$*"; }
@@ -44,6 +46,16 @@ send_admin_alert() {   # same as tools/bot-watchdog.sh: best-effort
 
 # Consume the request first: a flag left behind would re-trigger the .path unit.
 rm -f "$PANEL_FLAG"
+
+# Panels that negotiate HDMI normally (panel_reset=false) reset themselves on
+# signal loss and must NOT get the USB power-cycle (it also drops the mic and
+# 4G dongle). setup.sh installs none of the units that call this on such a
+# frame; this guard also covers a manual run.
+PANEL_RESET="$( (cd "$APP_DIR" && venv/bin/python3 -m app.hal env 2>/dev/null) | sed -n "s/^AV_PANEL_RESET=//p" | tr -d "'" )"
+if [[ "${PANEL_RESET:-1}" != "1" ]]; then
+    log "panel_reset=false -- skipping the panel power-cycle (this panel resets itself)"
+    exit 0
+fi
 
 exec 9>/run/amonavision-panel-reset.lock
 flock -n 9 || { log "already running -- ignoring this request"; exit 0; }

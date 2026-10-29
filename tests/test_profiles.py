@@ -51,6 +51,13 @@ def test_production_profiles_match_builtin():
     assert profiles._read_yaml("display", "lcdwiki-10.1-h") == builtin.LCDWIKI_10_1_H
 
 
+def test_display_panel_reset_flag():
+    """panel_reset drives the forced-mode/EDID + signal-rescue install (setup.sh,
+    launch.sh, the panel scripts). The LCDwiki needs it; a standard panel doesn't."""
+    assert profiles.load_profile("display", "lcdwiki-10.1-h").panel_reset is True
+    assert profiles.load_profile("display", "hgfrtee-12.3").panel_reset is False
+
+
 def test_missing_device_conf_uses_defaults(caplog):
     caplog.set_level(logging.DEBUG, logger="AmonaVision.hal")
     sel = hal.get_selection()

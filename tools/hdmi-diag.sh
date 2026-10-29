@@ -11,7 +11,8 @@
 #   ssh av@<tailscale-ip> 'sudo -S -v 2>/dev/null <<< "<password>"; bash -s' < tools/hdmi-diag.sh
 
 set -uo pipefail
-OUT_DIR=/home/av/hdmi-diag
+APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+OUT_DIR="$(dirname "$APP_DIR")/hdmi-diag"
 mkdir -p "$OUT_DIR"
 OUT="$OUT_DIR/hdmi-diag-$(date +%Y%m%d-%H%M%S).txt"
 

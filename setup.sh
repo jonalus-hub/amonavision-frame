@@ -26,14 +26,30 @@ for arg in "$@"; do
     case $arg in --tailscale-key=*) TAILSCALE_KEY="${arg#*=}" ;; esac
 done
 
-APP_USER=av
-APP_DIR=/home/$APP_USER/AmonaVision
+# Who and where: the frame runs as whoever installed this checkout, wherever it
+# lives — no hard-coded 'av' or /home path, so the same installer works under
+# any account. APP_USER is the human who ran `sudo bash setup.sh` (SUDO_USER),
+# falling back to the owner of the checkout when run as root directly.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+APP_DIR="$SCRIPT_DIR"
+APP_USER="${SUDO_USER:-$(stat -c %U "$SCRIPT_DIR")}"
 LOG="$APP_DIR/setup.log"
 TS_IP=""
 # DRM connector the panel is plugged into (HDMI0 = HDMI-A-1). Step 3b forces it
 # on with the panel's own EDID so a panel that's slow to wake still gets a signal.
 HDMI_CONNECTOR=HDMI-A-1
+# Does this panel need the LCDwiki hand-holding (forced mode/EDID + signal
+# rescue)? Default 1 (the legacy lcdwiki behaviour); the real value is read from
+# the hardware profile in Step 1c, once python3-yaml is installed.
+PANEL_RESET=1
+
+# Install a systemd unit from the checkout, substituting this device's user and
+# path for the __APP_USER__ / __APP_DIR__ placeholders. This is what lets the
+# same units run under any account instead of a hard-coded 'av' / /home/av.
+install_unit() {   # $1 = unit filename (lives in $SCRIPT_DIR)
+    sed -e "s#__APP_USER__#${APP_USER}#g" -e "s#__APP_DIR__#${APP_DIR}#g" \
+        "$SCRIPT_DIR/$1" > "/etc/systemd/system/$1"
+}
 
 # ── Logging — mirror all output to setup.log ──────────────────────────────────
 mkdir -p "$APP_DIR"
@@ -135,7 +151,7 @@ step "Installing system packages..."
 DEBIAN_FRONTEND=noninteractive apt-get update -qq
 DEBIAN_FRONTEND=noninteractive apt-get install -y \
     python3-dev python3-pip python3-venv \
-    python3-gpiozero python3-lgpio \
+    python3-gpiozero python3-lgpio python3-yaml \
     pipewire pipewire-audio pipewire-pulse wireplumber \
     libpulse0 libportaudio2 \
     fontconfig \
@@ -154,6 +170,20 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y \
 #   NTP steps it. (Masked on RPi OS trixie, which uses timesyncd's own clock
 #   floor — see Step 8d — but harmless to install for images where it isn't.)
 ok "System packages installed."
+
+# ── Step 1c: hardware profile ────────────────────────────────────────────────
+# python3-yaml is now installed, so the HAL can read device.conf + profiles/ as
+# root. Everything below has an rpi4 + lcdwiki fallback (set above), so a
+# missing device.conf or a soft HAL failure keeps the known-good behaviour.
+step "Reading hardware profile (device.conf)..."
+if HAL_ENV="$(cd "$SCRIPT_DIR" && python3 -m app.hal env 2>/dev/null)" && [[ -n "$HAL_ENV" ]]; then
+    eval "$HAL_ENV"
+    HDMI_CONNECTOR="${AV_HDMI_CONNECTOR:-$HDMI_CONNECTOR}"
+    PANEL_RESET="${AV_PANEL_RESET:-$PANEL_RESET}"
+    ok "Hardware: $(cd "$SCRIPT_DIR" && python3 -m app.hal label 2>/dev/null || echo '?') (panel_reset=$PANEL_RESET)"
+else
+    warn "Hardware profile could not be read — using the built-in rpi4 + lcdwiki defaults."
+fi
 
 # ═══════════════════════════════════════════════════════════════════════════════
 hdr "HARDWARE CONFIGURATION"
@@ -193,15 +223,23 @@ step "Configuring HDMI output..."
 # kmsdrm/ALSA would not expose the HDMI sink at all without this.
 # Deliberately bare (no ":0"/":1" port suffix) — this is the verified-working
 # form, confirmed via journalctl + wpctl on the live device.
-grep -qF "hdmi_force_hotplug" "$CONFIG" || echo "hdmi_force_hotplug=1" >> "$CONFIG"
-grep -qF "hdmi_force_edid_audio" "$CONFIG" || echo "hdmi_force_edid_audio=1" >> "$CONFIG"
+# Only the LCDwiki-style fragile panel (panel_reset=1) needs its HDMI forced on
+# and audio forced into the EDID; a panel that negotiates HDMI normally must NOT
+# get these, so strip them if they are left over from an earlier run.
+if [[ "$PANEL_RESET" == "1" ]]; then
+    grep -qF "hdmi_force_hotplug" "$CONFIG" || echo "hdmi_force_hotplug=1" >> "$CONFIG"
+    grep -qF "hdmi_force_edid_audio" "$CONFIG" || echo "hdmi_force_edid_audio=1" >> "$CONFIG"
+    ok "HDMI force-hotplug + forced EDID audio enabled, DSI auto-detect disabled."
+else
+    sed -i '/^hdmi_force_hotplug=1$/d; /^hdmi_force_edid_audio=1$/d' "$CONFIG"
+    ok "Standard HDMI panel (panel_reset=0) — no forced hotplug/EDID-audio; DSI auto-detect disabled."
+fi
 # Remove any port-suffixed or hdmi_drive lines from a previous (broken) run.
 sed -i '/^hdmi_force_hotplug:[01]=1$/d; /^hdmi_force_edid_audio:[01]=1$/d; /^hdmi_drive:[01]=2$/d; /^hdmi_group:[01]=2$/d; /^hdmi_mode:[01]=87$/d; /^hdmi_cvt:[01]=.*$/d' "$CONFIG"
 sed -i 's/^dtoverlay=vc4-fkms-v3d$/dtoverlay=vc4-kms-v3d/' "$CONFIG"
 # display_auto_detect: disable continuous DSI display scanning — we use HDMI
 # only. The Pi-default value (1) causes interference with the HDMI signal.
 sed -i 's/^display_auto_detect=.*/display_auto_detect=0/' "$CONFIG"
-ok "HDMI force-hotplug + forced EDID audio enabled, DSI auto-detect disabled."
 
 # ── Step 3b: kernel command line hardening ────────────────────────────────────
 step "Hardening cmdline.txt..."
@@ -220,14 +258,36 @@ pin_cmdline() {
         END { printf "%s", t }' "$CMDLINE" > "$CMDLINE.new" && mv -f "$CMDLINE.new" "$CMDLINE"
     ok "  cmdline.txt: set $2 (previous version kept as $CMDLINE_BAK)"
 }
+# Drop every token on the single cmdline that starts with $1 (the inverse of
+# pin_cmdline). Used for a panel that forces no mode/EDID, so a frame reflashed
+# or re-profiled from the LCDwiki doesn't keep its forced 1024x600 mode.
+unpin_cmdline() {
+    if awk -v p="$1" '{ out=""; n=0; for (i = 1; i <= NF; i++) if (index($i, p) == 1) n++; else out = out (out=="" ? "" : " ") $i; printf "%s", out; exit !(n > 0) }' \
+            "$CMDLINE" > "$CMDLINE.new"; then
+        [[ -e "$CMDLINE_BAK" ]] || cp -p "$CMDLINE" "$CMDLINE_BAK"
+        mv -f "$CMDLINE.new" "$CMDLINE"
+        ok "  cmdline.txt: removed ${1}* (previous version kept as $CMDLINE_BAK)"
+    else
+        rm -f "$CMDLINE.new"
+    fi
+}
 # video=...D forces the HDMI connector on even if the panel isn't detected at
 # boot, and drm.edid_firmware= hands it the panel's own EDID (Step 3d puts the
 # file in the initramfs), so it always comes up in HDMI mode with audio.
 # The panel's native 1024x600 timing has an odd hsync start, which the Pi 4
 # HDMI block can't produce: the kernel drops it ("User-defined mode not
 # supported" in dmesg) and the panel is actually driven at 1920x1080, scaled.
-pin_cmdline "video=${HDMI_CONNECTOR}:" "video=${HDMI_CONNECTOR}:1024x600M@60D"
-pin_cmdline "drm.edid_firmware=" "drm.edid_firmware=${HDMI_CONNECTOR}:edid/amona.bin"
+# Only forced for the LCDwiki (panel_reset=1): its odd native timing and its
+# "doesn't advertise audio" EDID both need pinning. A standard panel reads its
+# own EDID and picks its native mode, so force nothing — and clear any left over
+# from a previous LCDwiki install on this SD card.
+if [[ "$PANEL_RESET" == "1" ]]; then
+    pin_cmdline "video=${HDMI_CONNECTOR}:" "video=${HDMI_CONNECTOR}:1024x600M@60D"
+    pin_cmdline "drm.edid_firmware=" "drm.edid_firmware=${HDMI_CONNECTOR}:edid/amona.bin"
+else
+    unpin_cmdline "video=${HDMI_CONNECTOR}:"
+    unpin_cmdline "drm.edid_firmware="
+fi
 # usbcore.autosuspend=-1: disable USB autosuspend at kernel level — more
 # reliable than the udev rule alone for USB-powered peripherals (displays, hubs)
 grep -qF "usbcore.autosuspend" "$CMDLINE" || sed -i 's/$/ usbcore.autosuspend=-1/' "$CMDLINE"
@@ -240,7 +300,11 @@ grep -qF "consoleblank" "$CMDLINE"       || sed -i 's/$/ consoleblank=0/' "$CMDL
 # buttons handle everything) — telling usbhid to ignore this exact
 # vendor:product prevents the kernel from ever binding it, so it's never
 # enumerated in the first place.
-grep -qF "usbhid.quirks" "$CMDLINE"      || sed -i 's/$/ usbhid.quirks=0x0484:0x5750:0x0004/' "$CMDLINE"
+if [[ "$PANEL_RESET" == "1" ]]; then
+    grep -qF "usbhid.quirks" "$CMDLINE"  || sed -i 's/$/ usbhid.quirks=0x0484:0x5750:0x0004/' "$CMDLINE"
+else
+    unpin_cmdline "usbhid.quirks="
+fi
 # cgroup_enable=memory cgroup_memory=1: the Pi bootloader injects
 # "cgroup_disable=memory" into the kernel command line by default, which makes
 # the memory cgroup controller unavailable — every MemoryMax=/MemoryHigh= in
@@ -277,11 +341,15 @@ fi
 # (err=-2)") and a panel not detected at boot gets no EDID: DVI mode, no HDMI
 # audio. The hook re-adds the file on every update-initramfs, so kernel
 # updates keep it.
-step "Installing the panel EDID into the initramfs..."
-install -D -m 0644 "$SCRIPT_DIR/config/edid/amona.bin" /lib/firmware/edid/amona.bin
-install -D -m 0755 "$SCRIPT_DIR/config/initramfs-tools/hooks/amona-edid" /etc/initramfs-tools/hooks/amona-edid
-update-initramfs -u -k all
-ok "Panel EDID installed and baked into the initramfs (kept on every kernel update)."
+if [[ "$PANEL_RESET" == "1" ]]; then
+    step "Installing the panel EDID into the initramfs..."
+    install -D -m 0644 "$SCRIPT_DIR/config/edid/amona.bin" /lib/firmware/edid/amona.bin
+    install -D -m 0755 "$SCRIPT_DIR/config/initramfs-tools/hooks/amona-edid" /etc/initramfs-tools/hooks/amona-edid
+    update-initramfs -u -k all
+    ok "Panel EDID installed and baked into the initramfs (kept on every kernel update)."
+else
+    ok "Standard panel (panel_reset=0) — no forced EDID baked into the initramfs."
+fi
 
 # ── Step 4: PWM fan overlay ───────────────────────────────────────────────────
 # BCM 18 / physical pin 12 — 4-pin PWM fan at 25 kHz.
@@ -615,9 +683,9 @@ step "Installing systemd services..."
 # Make sure the project's own scripts are executable (a deploy that lands them
 # without +x has 203/EXEC'd amonavision.service into a StartLimit failure).
 chmod +x "$APP_DIR"/*.sh "$APP_DIR"/tools/*.sh 2>/dev/null || true
-cp "$SCRIPT_DIR/amonavision.service"  /etc/systemd/system/amonavision.service
-cp "$SCRIPT_DIR/fan-control.service" /etc/systemd/system/fan-control.service
-cp "$SCRIPT_DIR/firstboot.service"   /etc/systemd/system/firstboot.service
+install_unit amonavision.service
+install_unit fan-control.service
+install_unit firstboot.service
 systemctl daemon-reload
 systemctl enable amonavision.service fan-control.service firstboot.service
 ok "Services installed and enabled."
@@ -775,8 +843,8 @@ set -e
 # below); deliberately separate from TELEGRAM_GROUP_CHAT_ID, which viewer.py
 # uses for the voice-reply fallback to the family group — different audience.
 step "Installing periodic health-check timer..."
-cp "$SCRIPT_DIR/amonavision-healthcheck.service" /etc/systemd/system/amonavision-healthcheck.service
-cp "$SCRIPT_DIR/amonavision-healthcheck.timer"   /etc/systemd/system/amonavision-healthcheck.timer
+install_unit amonavision-healthcheck.service
+install_unit amonavision-healthcheck.timer
 chmod +x "$APP_DIR/tools/health-alert.sh" 2>/dev/null || true
 systemctl daemon-reload
 systemctl enable --now amonavision-healthcheck.timer
@@ -795,8 +863,8 @@ ok "Health-check timer active (first run in 5 min, then every 3h)."
 # It also logs + self-heals the 4G dongle (USB re-plug / redial / dongle
 # reboot), which — being the network itself at the site — runs even offline.
 step "Installing liveness watchdog (bot + Tailscale + 4G dongle)..."
-cp "$SCRIPT_DIR/amonavision-bot-watchdog.service" /etc/systemd/system/amonavision-bot-watchdog.service
-cp "$SCRIPT_DIR/amonavision-bot-watchdog.timer"   /etc/systemd/system/amonavision-bot-watchdog.timer
+install_unit amonavision-bot-watchdog.service
+install_unit amonavision-bot-watchdog.timer
 chmod +x "$APP_DIR/tools/bot-watchdog.sh" 2>/dev/null || true
 systemctl daemon-reload
 systemctl enable --now amonavision-bot-watchdog.timer
@@ -809,23 +877,39 @@ ok "Liveness watchdog active (checks every 5 min; self-heals a wedged bot, tails
 # root: USB power off 10 s (panel, mic and 4G dongle -- the Pi 4's ports are
 # ganged), back on, viewer restarted so the HDMI signal is re-presented.
 step "Installing /screen panel reset (USB power-cycle)..."
-cp "$SCRIPT_DIR/amonavision-panel-reset.service" /etc/systemd/system/amonavision-panel-reset.service
-cp "$SCRIPT_DIR/amonavision-panel-reset.path"    /etc/systemd/system/amonavision-panel-reset.path
+install_unit amonavision-panel-reset.service
+install_unit amonavision-panel-reset.path
 systemctl daemon-reload
-systemctl enable --now amonavision-panel-reset.path
-ok "/screen panel reset ready (admin chat only)."
+if [[ "$PANEL_RESET" == "1" ]]; then
+    systemctl enable --now amonavision-panel-reset.path
+    ok "/screen panel reset ready (admin chat only)."
+else
+    systemctl disable --now amonavision-panel-reset.path 2>/dev/null || true
+    ok "Standard panel (panel_reset=0) — /screen USB power-cycle left disabled (panel resets itself)."
+fi
 
 # /reboot: same flag + .path pattern (av's sudo wants a password, so the old
 # `sudo reboot` never ran). Reboots; amonavision-reboot-panel-cycle.service
 # power-cycles the panel once the frame is up after every boot (cold or not).
 step "Installing /reboot (reboot + panel power-cycle)..."
-cp "$SCRIPT_DIR/amonavision-reboot.service"             /etc/systemd/system/amonavision-reboot.service
-cp "$SCRIPT_DIR/amonavision-reboot.path"                /etc/systemd/system/amonavision-reboot.path
-cp "$SCRIPT_DIR/amonavision-reboot-panel-cycle.service" /etc/systemd/system/amonavision-reboot-panel-cycle.service
+install_unit amonavision-reboot.service
+install_unit amonavision-reboot.path
+install_unit amonavision-reboot-panel-cycle.service
 systemctl daemon-reload
 systemctl enable --now amonavision-reboot.path
-systemctl enable amonavision-reboot-panel-cycle.service
-ok "/reboot ready (admin chat only); the panel is power-cycled after every boot."
+# The automatic post-boot panel power-cycle only makes sense for a panel that
+# needs the rescue; a standard panel must not have its USB (and the mic + 4G
+# dongle) cut on every boot.
+if [[ "$PANEL_RESET" == "1" ]]; then
+    systemctl enable amonavision-reboot-panel-cycle.service
+else
+    systemctl disable amonavision-reboot-panel-cycle.service 2>/dev/null || true
+fi
+if [[ "$PANEL_RESET" == "1" ]]; then
+    ok "/reboot ready (admin chat only); the panel is power-cycled after every boot."
+else
+    ok "/reboot ready (admin chat only); no post-boot panel power-cycle (standard panel)."
+fi
 
 # ── Step 14d: LAN dashboard ──────────────────────────────────────────────────
 # web/app.py behind its own systemd unit, fully isolated from the frame
@@ -833,7 +917,7 @@ ok "/reboot ready (admin chat only); the panel is power-cycled after every boot.
 # amonavision.service). Read-mostly: only ever writes config.txt and the
 # soft-restart flag. Refuses to start unless WEB_PASSWORD is in .env.
 step "Installing LAN dashboard (amonavision-web on :8080)..."
-cp "$SCRIPT_DIR/amonavision-web.service" /etc/systemd/system/amonavision-web.service
+install_unit amonavision-web.service
 systemctl daemon-reload
 if grep -qE '^WEB_PASSWORD=.+' "$APP_DIR/.env" 2>/dev/null; then
     systemctl enable --now amonavision-web.service
@@ -887,17 +971,30 @@ else
     (( ISSUES++ )) || true
 fi
 
-# /screen panel reset
-if systemctl is-enabled amonavision-panel-reset.path &>/dev/null && command -v uhubctl &>/dev/null; then
-    ok "amonavision-panel-reset.path — enabled (/screen)."
+# /screen panel reset + post-boot panel power-cycle — only expected when this
+# panel needs the rescue (panel_reset=1). On a standard panel their absence is
+# correct, not a problem.
+if [[ "$PANEL_RESET" == "1" ]]; then
+    if systemctl is-enabled amonavision-panel-reset.path &>/dev/null && command -v uhubctl &>/dev/null; then
+        ok "amonavision-panel-reset.path — enabled (/screen)."
+    else
+        warn "amonavision-panel-reset.path or uhubctl missing — /screen won't do anything."
+        (( ISSUES++ )) || true
+    fi
+    if systemctl is-enabled amonavision-reboot-panel-cycle.service &>/dev/null; then
+        ok "amonavision-reboot-panel-cycle.service — enabled (panel power-cycled after every boot)."
+    else
+        warn "amonavision-reboot-panel-cycle.service not enabled — the panel won't be power-cycled on boot."
+        (( ISSUES++ )) || true
+    fi
 else
-    warn "amonavision-panel-reset.path or uhubctl missing — /screen won't do anything."
-    (( ISSUES++ )) || true
+    ok "Standard panel (panel_reset=0) — /screen + post-boot power-cycle intentionally disabled."
 fi
-if systemctl is-enabled amonavision-reboot.path &>/dev/null && systemctl is-enabled amonavision-reboot-panel-cycle.service &>/dev/null; then
-    ok "amonavision-reboot.path + amonavision-reboot-panel-cycle.service — enabled (/reboot)."
+# /reboot itself (a plain reboot) is useful on any panel.
+if systemctl is-enabled amonavision-reboot.path &>/dev/null; then
+    ok "amonavision-reboot.path — enabled (/reboot)."
 else
-    warn "/reboot units not enabled — /reboot won't do anything."
+    warn "amonavision-reboot.path not enabled — /reboot won't do anything."
     (( ISSUES++ )) || true
 fi
 

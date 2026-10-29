@@ -12,7 +12,7 @@
 
 set -uo pipefail   # no -e: one failed check must not abort the whole script
 
-APP_DIR=/home/av/AmonaVision
+APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"   # repo root, whatever the user/path
 ENV_FILE="$APP_DIR/.env"
 STATE_DIR=/var/lib/amonavision
 STATE_FILE="$STATE_DIR/healthcheck_state"

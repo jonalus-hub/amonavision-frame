@@ -9,7 +9,7 @@ After=amonavision.service
 # back, and must not hold up multi-user.target meanwhile.
 Type=simple
 User=root
-ExecStart=/usr/bin/bash /home/av/AmonaVision/tools/reboot-with-panel-cycle.sh after-boot
+ExecStart=/usr/bin/bash __APP_DIR__/tools/reboot-with-panel-cycle.sh after-boot
 
 [Install]
 WantedBy=multi-user.target

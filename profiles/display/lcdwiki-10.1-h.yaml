@@ -6,6 +6,14 @@ id: lcdwiki-10.1-h
 name: LCDwiki 10.1inch HDMI Display-H
 status: verified
 
+# This panel has a slow/flaky HDMI wake: it needs its mode + EDID forced at
+# boot (see kernel_mode/edid_file below and setup.sh) and can still come up on
+# "No signal", so the frame re-presents the signal once per boot and offers the
+# /screen + /reboot USB power-cycle rescue. A panel that negotiates HDMI
+# normally (reads its own EDID, resets itself on signal loss) sets this false,
+# and setup.sh then forces nothing and installs none of the panel-reset units.
+panel_reset: true
+
 native_size: [1024, 600]
 connector: hdmi
 # Kernel mode forced on the HDMI connector (cmdline.txt video=) and the EDID

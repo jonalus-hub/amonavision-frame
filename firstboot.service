@@ -9,7 +9,7 @@ ConditionPathExists=/var/lib/amonavision/.firstboot-pending
 
 [Service]
 Type=oneshot
-User=av
+User=__APP_USER__
 # Wait up to 60s for internet to fully establish before testing.
 # Probe TCP/443, not TCP/53 — mobile/4G APNs often block or hijack TCP/53.
 ExecStartPre=/bin/bash -c '\
@@ -18,7 +18,7 @@ ExecStartPre=/bin/bash -c '\
         sleep 3; \
     done; exit 0'
 Environment=FIRSTBOOT_RUN="first reboot after setup"
-ExecStart=/bin/bash /home/av/AmonaVision/test_setup.sh
+ExecStart=/bin/bash __APP_DIR__/test_setup.sh
 # Flag is removed inside test_setup.sh so it always clears even on test failure
 StandardOutput=journal+console
 StandardError=journal+console

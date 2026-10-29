@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # AmonaVision — post-setup validation suite
-# Usage: bash /home/av/AmonaVision/test_setup.sh
+# Usage: bash <checkout>/test_setup.sh
 #
-# Run as the 'av' user (not root) for full coverage.
+# Run as the frame's own user (not root) for full coverage.
 # Exits 0 if all tests pass, 1 if any FAIL.
 
-APP_USER=av
-APP_DIR=/home/$APP_USER/AmonaVision
+# The frame runs as whoever owns this checkout, wherever it lives — no
+# hard-coded 'av' / /home path (matches setup.sh and the systemd units).
+APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+APP_USER="$(stat -c %U "$APP_DIR")"
 VENV="$APP_DIR/venv/bin/python3"
 
 # Non-interactive shells (SSH batch commands, the bot's subprocess, systemd
@@ -260,12 +262,15 @@ else
 fi
 
 # The installed unit should match the project copy: a live edit to only one of
-# them gets silently reverted, or silently kept, by the next setup.sh run.
-if cmp -s /etc/systemd/system/amonavision.service "$APP_DIR/amonavision.service"; then
+# them gets silently reverted, or silently kept, by the next setup.sh run. The
+# project copy carries __APP_USER__/__APP_DIR__ placeholders that setup.sh
+# renders on install, so compare against the rendered form, not the raw file.
+if cmp -s /etc/systemd/system/amonavision.service \
+        <(sed -e "s#__APP_USER__#${APP_USER}#g" -e "s#__APP_DIR__#${APP_DIR}#g" "$APP_DIR/amonavision.service"); then
     pass "Installed amonavision.service matches the project copy"
 else
-    warn "Installed amonavision.service differs from $APP_DIR/amonavision.service"
-    echo "       Fix: sudo cp $APP_DIR/amonavision.service /etc/systemd/system/ && sudo systemctl daemon-reload"
+    warn "Installed amonavision.service differs from $APP_DIR/amonavision.service (rendered)"
+    echo "       Fix: re-run setup.sh (it renders __APP_USER__/__APP_DIR__), then sudo systemctl daemon-reload"
 fi
 
 # lightdm disabled

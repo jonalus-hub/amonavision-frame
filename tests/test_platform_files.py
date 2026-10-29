@@ -39,6 +39,27 @@ def test_system_conf_fragment_is_what_setup_writes(line):
     assert line in SETUP
 
 
+def test_panel_reset_gates_the_forced_mode_and_rescue():
+    """setup.sh and launch.sh must branch on the panel's panel_reset flag, so a
+    standard panel gets neither the forced mode/EDID nor the USB power-cycle."""
+    assert "AV_PANEL_RESET" in SETUP and 'PANEL_RESET="${AV_PANEL_RESET:-' in SETUP
+    assert '[[ "$PANEL_RESET" == "1" ]]' in SETUP
+    launch = (PROJECT_ROOT / "launch.sh").read_text()
+    assert "AV_PANEL_RESET" in launch
+    ppc = (PROJECT_ROOT / "tools/panel-power-cycle.sh").read_text()
+    assert "AV_PANEL_RESET" in ppc  # the script no-ops on a panel that doesn't need it
+
+
+def test_units_use_placeholders_not_a_hardcoded_user():
+    """The systemd units ship with __APP_USER__/__APP_DIR__ placeholders that
+    setup.sh renders, so the install isn't tied to a hard-coded 'av' account."""
+    svc = (PROJECT_ROOT / "amonavision.service").read_text()
+    assert "User=__APP_USER__" in svc and "Group=__APP_USER__" in svc
+    assert "__APP_DIR__/launch.sh" in svc
+    assert "/home/av/" not in svc and "User=av" not in svc
+    assert "install_unit()" in SETUP
+
+
 def test_display_profile_matches_setup():
     expanded = _setup_expanded()
     assert f"video={RPI4.hdmi_connector}:{LCDWIKI.kernel_mode}" in expanded

@@ -10,6 +10,7 @@ source venv/bin/activate
 # values, used if the HAL can't run.
 HAL_ENV=$(python3 -m app.hal env 2>/dev/null) && eval "$HAL_ENV"
 HDMI_CONNECTOR="${AV_HDMI_CONNECTOR:-HDMI-A-1}"
+PANEL_RESET="${AV_PANEL_RESET:-1}"   # 1 = LCDwiki-style fragile panel (legacy default)
 
 # Re-present the HDMI signal once per boot, before the viewer takes the display.
 # The panel sometimes misses a signal that was already running when it finished
@@ -17,14 +18,16 @@ HDMI_CONNECTOR="${AV_HDMI_CONNECTOR:-HDMI-A-1}"
 # does the same. Wait until 20 s of uptime so the panel (powered from the Pi's
 # USB, up ~2 s after the kernel) has surely finished booting. The marker lives
 # in /run/user/1000, so it's gone after a reboot but survives service restarts.
+# Only for panels that need it (panel_reset); a panel that negotiates HDMI
+# normally resets itself on signal loss and never shows the stuck "No signal".
 RESYNC_MARK="${XDG_RUNTIME_DIR:-/run/user/1000}/amona-hdmi-resynced"
-if [[ ! -e "$RESYNC_MARK" ]]; then
+if [[ "$PANEL_RESET" == "1" && ! -e "$RESYNC_MARK" ]]; then
     while (( $(cut -d. -f1 /proc/uptime) < 20 )); do sleep 1; done
     python3 tools/hdmi-resync.py "$HDMI_CONNECTOR" 3 && touch "$RESYNC_MARK"
 fi
 
 # Route audio: HDMI out, USB mic in
-export PULSE_RUNTIME_PATH=/run/user/1000/pulse
+export PULSE_RUNTIME_PATH="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/pulse"
 export PULSE_LATENCY_MSEC=150   # larger PipeWire audio buffer — prevents underruns during video decode
 
 # PipeWire node id of the first node with media.class $1 whose node.name

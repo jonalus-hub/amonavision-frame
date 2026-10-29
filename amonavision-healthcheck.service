@@ -6,4 +6,4 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 User=root
-ExecStart=/usr/bin/bash /home/av/AmonaVision/tools/health-alert.sh
+ExecStart=/usr/bin/bash __APP_DIR__/tools/health-alert.sh

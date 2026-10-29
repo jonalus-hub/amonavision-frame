@@ -4,7 +4,7 @@ After=multi-user.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3 /home/av/AmonaVision/fan_control.py
+ExecStart=/usr/bin/python3 __APP_DIR__/fan_control.py
 Restart=always
 RestartSec=5
 

@@ -5,6 +5,12 @@ id: hgfrtee-12.3
 name: HGFRTEE 12.3inch 1920x1280
 status: unverified
 
+# Standard HDMI panel: it negotiates its own EDID/mode and resets on signal
+# loss, so setup.sh forces no mode/EDID and installs none of the panel-reset
+# units, and the frame skips the per-boot HDMI re-present. (If a real unit
+# turns out to need the LCDwiki-style hand-holding, flip this to true.)
+panel_reset: false
+
 native_size: [1920, 1280]
 connector: mini-hdmi       # TODO: USB-C input too — DisplayPort alt mode?
 kernel_mode: null          # TODO: does it need a forced video= mode?

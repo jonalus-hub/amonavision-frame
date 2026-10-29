@@ -18,7 +18,7 @@
 
 set -uo pipefail
 
-APP_DIR=/home/av/AmonaVision
+APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"   # repo root, whatever the user/path
 REBOOT_FLAG=/tmp/amonavision_reboot_request   # written by the bot (/reboot)
 MARKER=/var/lib/amonavision/panel-cycle-on-boot
 MIN_UPTIME_S=180
