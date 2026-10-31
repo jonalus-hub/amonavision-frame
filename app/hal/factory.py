@@ -84,6 +84,9 @@ class Platform:
             # setup.sh can branch on it; "0" means the panel negotiates HDMI
             # normally and setup.sh forces nothing and installs no reset units.
             "AV_PANEL_RESET": "1" if self.display.panel_reset else "0",
+            # Whether this frame has a 4G dongle (device.conf net). "0" = Wi-Fi
+            # only, so the liveness watchdog skips the 4G recovery/reboot ladder.
+            "AV_HAS_4G": "1" if self.selection.has_4g else "0",
         }
         env.update(self.audio.shell_env())
         return {k: (None if v is None else str(v)) for k, v in env.items()}

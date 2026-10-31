@@ -105,6 +105,19 @@ def test_rpi4_shell_env_matches_legacy_literals():
     assert env["AV_HDMI_PW_DEVICE"] == "alsa_card.platform-fef00700.hdmi"
     assert env["AV_HDMI_ALSA_CARD"] == "vc4hdmi0"
     assert env["AV_KMSDRM_DEVICE_INDEX"] == "1"
+    assert env["AV_PANEL_RESET"] == "1"   # lcdwiki needs the signal rescue
+    assert env["AV_HAS_4G"] == "1"        # default: a cellular dongle is the primary link
+
+
+def test_wifi_only_selection_disables_the_4g_ladder():
+    """net=wifi -> AV_HAS_4G=0, so the liveness watchdog skips the 4G reboot ladder."""
+    sel = hal.Selection(
+        sbc=profiles.load_profile("sbc", "rpi4"),
+        display=profiles.load_profile("display", "lcdwiki-10.1-h"),
+        source="test", version="0.0.0", net="wifi",
+    )
+    assert sel.has_4g is False
+    assert Platform(sel).shell_env()["AV_HAS_4G"] == "0"
 
 
 def test_shell_bridge_cli(tmp_path):

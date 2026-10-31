@@ -91,6 +91,27 @@ def test_device_conf_selects_profiles(device_conf):
     assert (sel.sbc.id, sel.display.id) == ("radxa-zero3", "hgfrtee-12.3")
 
 
+def test_device_conf_net_defaults_to_4g(device_conf, caplog):
+    caplog.set_level(logging.DEBUG, logger="AmonaVision.hal")
+    device_conf("[device]\ndisplay = hgfrtee-12.3\n")   # no net key
+    sel = hal.get_selection()
+    assert (sel.net, sel.has_4g) == ("4g", True)
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+
+
+def test_device_conf_net_wifi(device_conf):
+    device_conf("[device]\ndisplay = hgfrtee-12.3\nnet = wifi\n")
+    sel = hal.get_selection()
+    assert (sel.net, sel.has_4g) == ("wifi", False)
+
+
+def test_device_conf_net_unknown_falls_back(device_conf, caplog):
+    device_conf("[device]\nnet = lte\n")
+    sel = hal.get_selection()
+    assert sel.net == "4g"
+    assert any("net=" in r.getMessage() for r in caplog.records if r.levelno == logging.WARNING)
+
+
 def test_unknown_profile_falls_back_with_error(device_conf, caplog):
     device_conf("[device]\nsbc = nope\ndisplay = nope-either\n")
     sel = hal.get_selection()

@@ -38,6 +38,7 @@ VERSION_FILE = PROJECT_ROOT / "VERSION"
 
 DEFAULT_SBC = "rpi4"
 DEFAULT_DISPLAY = "lcdwiki-10.1-h"
+DEFAULT_NET = "4g"          # a USB cellular dongle is the primary link; "wifi" = none
 KINDS = ("sbc", "display")
 
 
@@ -164,6 +165,11 @@ class Selection:
     display: DisplayProfile
     source: str          # "device.conf" or "defaults"
     version: str
+    net: str = "4g"      # "4g" (has a cellular dongle) or "wifi" (Wi-Fi only)
+
+    @property
+    def has_4g(self) -> bool:
+        return self.net != "wifi"
 
     def label(self) -> str:
         """e.g. 'v1.0.0 · rpi4 · lcdwiki-10.1-h' — logs and /pi."""
@@ -222,20 +228,24 @@ def load_profile(kind: str, profile_id: str):
         return _PARSERS[kind](copy.deepcopy(fallback))
 
 
-def read_device_conf(path: Path | None = None) -> tuple[str, str, str]:
-    """(sbc id, display id, source). Defaults for anything not set."""
+def read_device_conf(path: Path | None = None) -> tuple[str, str, str, str]:
+    """(sbc id, display id, net, source). Defaults for anything not set."""
     path = Path(path or os.environ.get("AMONAVISION_DEVICE_CONF") or DEVICE_CONF)
     cp = configparser.ConfigParser()
     try:
         found = cp.read(path, encoding="utf-8")
     except (configparser.Error, OSError, UnicodeDecodeError) as e:
         logger.error("Cannot parse %s (%s) — using the default hardware profiles", path, e)
-        return DEFAULT_SBC, DEFAULT_DISPLAY, "defaults"
+        return DEFAULT_SBC, DEFAULT_DISPLAY, DEFAULT_NET, "defaults"
     if not found:
-        return DEFAULT_SBC, DEFAULT_DISPLAY, "defaults"
+        return DEFAULT_SBC, DEFAULT_DISPLAY, DEFAULT_NET, "defaults"
     sbc = cp.get("device", "sbc", fallback="").strip() or DEFAULT_SBC
     display = cp.get("device", "display", fallback="").strip() or DEFAULT_DISPLAY
-    return sbc, display, "device.conf"
+    net = cp.get("device", "net", fallback="").strip().lower() or DEFAULT_NET
+    if net not in ("4g", "wifi"):
+        logger.warning("device.conf net=%r not understood — using %r", net, DEFAULT_NET)
+        net = DEFAULT_NET
+    return sbc, display, net, "device.conf"
 
 
 def read_version() -> str:
@@ -278,12 +288,12 @@ def _load_or_default(kind: str, profile_id: str, default_id: str):
 
 def load_selection(device_conf: Path | None = None, dt_model_path: Path | None = None,
                    check_board: bool = True) -> Selection:
-    sbc_id, display_id, source = read_device_conf(device_conf)
+    sbc_id, display_id, net, source = read_device_conf(device_conf)
     sbc = _load_or_default("sbc", sbc_id, DEFAULT_SBC)
     display = _load_or_default("display", display_id, DEFAULT_DISPLAY)
     if check_board:
         check_device_tree(sbc, dt_model_path)
-    return Selection(sbc=sbc, display=display, source=source, version=read_version())
+    return Selection(sbc=sbc, display=display, net=net, source=source, version=read_version())
 
 
 @functools.lru_cache(maxsize=1)

@@ -50,6 +50,15 @@ def test_panel_reset_gates_the_forced_mode_and_rescue():
     assert "AV_PANEL_RESET" in ppc  # the script no-ops on a panel that doesn't need it
 
 
+def test_watchdog_skips_4g_ladder_on_wifi_only():
+    """A Wi-Fi-only frame (AV_HAS_4G=0) must not run the dongle ladder — otherwise
+    the absent dongle escalates to a full reboot forever."""
+    wd = (PROJECT_ROOT / "tools/bot-watchdog.sh").read_text()
+    assert "AV_HAS_4G" in wd
+    assert 'if [[ "$HAS_4G" == "1" ]]' in wd   # the ladder is gated
+    assert "net = 4g" in (PROJECT_ROOT / "device.conf.example").read_text()
+
+
 def test_units_use_placeholders_not_a_hardcoded_user():
     """The systemd units ship with __APP_USER__/__APP_DIR__ placeholders that
     setup.sh renders, so the install isn't tied to a hard-coded 'av' account."""

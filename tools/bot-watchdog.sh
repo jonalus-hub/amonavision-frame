@@ -36,6 +36,13 @@ set -uo pipefail
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"   # repo root, whatever the user/path
 APP_USER="$(stat -c %U "$APP_DIR")"              # frame runs as whoever owns the checkout
 APP_RUID="$(id -u "$APP_USER" 2>/dev/null || echo 1000)"
+# Does this frame have a 4G dongle at all? A Wi-Fi-only frame (device.conf
+# net=wifi) has none, so the dongle ladder below — above all its reboot
+# escalation — must be skipped: rebooting can't conjure a dongle that isn't
+# there, so an "absent" link would otherwise reboot the Pi forever. Default 1
+# (a 4G frame) so nothing changes where the HAL can't run.
+HAS_4G="$( (cd "$APP_DIR" && python3 -B -m app.hal env 2>/dev/null) | sed -n "s/^AV_HAS_4G=//p" | tr -d "'" )"
+HAS_4G="${HAS_4G:-1}"
 ENV_FILE="$APP_DIR/.env"
 APP_LOG="$APP_DIR/app/logs/app.log"
 STATE_FILE=/var/lib/amonavision/watchdog_state
@@ -267,6 +274,7 @@ dongle_problem() {   # human description for the admin alert (ASCII, like the ot
     esac
 }
 
+if [[ "$HAS_4G" == "1" ]]; then   # Wi-Fi-only frame (net=wifi): skip the entire 4G ladder
 dongle_classify
 # A stick resetting itself takes ~1-5 s: don't mistake one caught mid-flight
 # for a stuck one -- look again before acting on a USB-side status.
@@ -395,6 +403,7 @@ if [[ -f "$DONGLE_LOG" ]] && [[ $(wc -l < "$DONGLE_LOG") -gt 20000 ]]; then
 fi
 
 [[ $PI_REBOOT_NEEDED -eq 1 ]] && escalate_to_reboot "the 4G link ($DONGLE_STATUS)" "re-plugging the modem over USB and through its API"
+fi   # end 4G ladder (HAS_4G == 1)
 
 # ── Wi-Fi fallback: re-activate a saved profile NM gave up on ─────────────────
 # A few rejected handshakes in a row (e.g. a phone hotspot still holding the

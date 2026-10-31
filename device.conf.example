@@ -13,3 +13,7 @@
 sbc = rpi4
 # lcdwiki-10.1-h (default) | hgfrtee-12.3 (not verified yet)
 display = lcdwiki-10.1-h
+# Primary network link: 4g (default — a USB cellular dongle is the main link and
+# Wi-Fi is the fallback) | wifi (no 4G dongle; Wi-Fi only). On 'wifi' the
+# liveness watchdog won't treat the absent dongle as a fault or reboot over it.
+net = 4g
