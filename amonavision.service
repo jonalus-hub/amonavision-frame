@@ -16,6 +16,9 @@ Type=simple
 User=__APP_USER__
 Group=__APP_USER__
 WorkingDirectory=__APP_DIR__
+# /run/amonavision: mpv's IPC socket and log, the viewer heartbeat (app/video/runtime.py)
+RuntimeDirectory=amonavision
+RuntimeDirectoryMode=0750
 Environment=SDL_VIDEODRIVER=kmsdrm
 # Usually card0 is the v3d render-only GPU node (no display capability) and
 # card1 the actual vc4 KMS display device. Without an index, SDL's
