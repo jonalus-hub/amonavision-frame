@@ -115,6 +115,7 @@ def _parse_settings(config: configparser.ConfigParser) -> dict:
         'pin_next':       config.getint('GPIO', 'pin_next',       fallback=HW.sbc.button_pins['next']),
 
         'samplerate':    config.getint    ('Audio',  'samplerate',    fallback=HW.audio.record_samplerate()),
+        'voice_cleanup': config.getboolean('Audio',  'voice_cleanup', fallback=True),
         'daily_restart': config.getboolean('System', 'daily_restart', fallback=True),
 
         'scoring_enabled':                  config.getboolean('Scoring', 'enabled',                          fallback=True),
@@ -169,6 +170,13 @@ try:
 except Exception as e:
     AUDIO_RECORDING_AVAILABLE = False
     logger.warning(f"Audio recording NOT available. Error: {e}. Make sure sounddevice and soundfile are installed.")
+
+# Noise cleanup of the voice replies (buzz/hiss removal + level), see app/voice_cleanup.py
+try:
+    from app import voice_cleanup
+except Exception as e:
+    voice_cleanup = None
+    logger.warning(f"Voice cleanup NOT available ({e}); replies will be sent unprocessed.")
 
 
 # Physical buttons: the HAL loads the board's GPIO backend (gpiozero on rpi4)
@@ -990,7 +998,8 @@ class ViewerApp:
             self._audio_stream = sd.InputStream(
                 samplerate=self.recording_samplerate,
                 channels=self.recording_channels,
-                dtype='int16',
+                # float32 keeps the full resolution of a quiet mic; the cleanup adds ~30 dB
+                dtype='float32',
                 callback=self._audio_callback,
             )
             self._audio_stream.start()
@@ -1046,6 +1055,16 @@ class ViewerApp:
         # Concatenate the frames and save as WAV
         audio_data = np.concatenate(self.recorded_frames, axis=0)
         self.recorded_frames = []
+
+        # Remove the mic's buzz/hiss and bring the voice up to a normal level
+        if SETTINGS['voice_cleanup'] and voice_cleanup is not None:
+            try:
+                t0 = time.time()
+                audio_data, info = voice_cleanup.clean_voice(audio_data, self.recording_samplerate)
+                logger.info("Voice cleanup applied: %+.1f dB gain on %.1fs of audio (%.2fs)",
+                            info['gain_db'], info['seconds'], time.time() - t0)
+            except Exception:
+                logger.exception("Voice cleanup failed — sending the recording unprocessed")
 
         now_str = datetime.now().strftime("%Y%m%d_%H%M%S")
         session_id = self.current_session['id'] if self.current_session else 0

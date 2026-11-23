@@ -47,6 +47,9 @@ pin_next = 22
 [Audio]
 # Recording sample rate (Hz)
 samplerate = 48000
+# True → clean up voice replies before sending (removes the mic's buzz/hiss, raises the level)
+# False → send the recording as captured
+voice_cleanup = True
 
 [System]
 # True → restart the frame automatically every day at 4:00 AM
