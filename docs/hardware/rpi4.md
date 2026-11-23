@@ -21,8 +21,8 @@ Each button goes between its pin and GND.
 
 | Item | Value | Status |
 |---|---|---|
-| DRM device | `/dev/dri/card1` (vc4 KMS; card0 is the v3d render node) → `SDL_KMSDRM_DEVICE_INDEX=1` | verified |
-| Connector | `HDMI-A-1` (HDMI0, next to USB-C power) | verified |
+| DRM device | usually `/dev/dri/card1` (vc4 KMS; card0 is the v3d render node), but the numbering follows probe order and can swap between boots — launch.sh sets `SDL_KMSDRM_DEVICE_INDEX` to the card the HAL finds the connectors on (`app/hal/drm.py`); 1 is the fallback | verified |
+| Connector | `HDMI-A-1` (HDMI0, next to USB-C power) for the LCDwiki; `HDMI-A-2` (HDMI1) also works for panels on `hdmi_connector: auto`, with the sound on the same port (`audio.hdmi_ports`) | verified |
 | KMS driver | `dtoverlay=vc4-kms-v3d` (full KMS; fake-KMS breaks the forced mode) | verified |
 | Panel mode / EDID | forced on the kernel command line, see the display page | verified |
 

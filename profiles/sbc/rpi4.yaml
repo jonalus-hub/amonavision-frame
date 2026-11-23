@@ -14,9 +14,13 @@ device_tree_models:
   - "Raspberry Pi 4"
 
 display:
-  # card0 is the v3d render-only node; card1 is the vc4 KMS display device.
+  # Usually card0 is the v3d render-only node and card1 the vc4 KMS display
+  # device, but the kernel numbers them in probe order, which can change
+  # between boots. The HAL picks the card that actually has connectors
+  # (app/hal/drm.py); this value is only the fallback when sysfs can't be read.
   kmsdrm_device_index: 1
-  # HDMI0, the micro-HDMI port next to the USB-C power input.
+  # HDMI0, the micro-HDMI port next to the USB-C power input. Display profiles
+  # with hdmi_connector: auto use whichever port the panel is on instead.
   hdmi_connector: HDMI-A-1
 
 buttons:
@@ -49,6 +53,17 @@ audio:
   hdmi_pipewire_device: alsa_card.platform-fef00700.hdmi
   hdmi_alsa_card: vc4hdmi0
   mic_source_pattern: '^alsa_input\.usb-'
+  # The same names for each HDMI port, so the sound always goes out of the port
+  # the picture is on (HDMI-A-1 = HDMI0 next to USB-C, HDMI-A-2 = HDMI1).
+  hdmi_ports:
+    HDMI-A-1:
+      hdmi_sink_pattern: '^alsa_output\.platform-fef00700\.hdmi\.'
+      hdmi_pipewire_device: alsa_card.platform-fef00700.hdmi
+      hdmi_alsa_card: vc4hdmi0
+    HDMI-A-2:
+      hdmi_sink_pattern: '^alsa_output\.platform-fef05700\.hdmi\.'
+      hdmi_pipewire_device: alsa_card.platform-fef05700.hdmi
+      hdmi_alsa_card: vc4hdmi1
 
 thermal:
   path: /sys/class/thermal/thermal_zone0/temp

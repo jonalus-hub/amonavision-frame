@@ -121,7 +121,8 @@ def test_wifi_only_selection_disables_the_4g_ladder():
 
 
 def test_shell_bridge_cli(tmp_path):
-    env = {"PATH": "/usr/bin:/bin", "AMONAVISION_DEVICE_CONF": str(tmp_path / "none")}
+    env = {"PATH": "/usr/bin:/bin", "AMONAVISION_DEVICE_CONF": str(tmp_path / "none"),
+           "AMONAVISION_SYS_DRM": str(tmp_path / "no-sys-drm")}
     out = subprocess.run([sys.executable, "-B", "-m", "app.hal", "env"], cwd=PROJECT_ROOT, env=env,
                          capture_output=True, text=True, check=True).stdout
     script = out + '\nprintf "%s|%s" "$AV_HDMI_SINK_RE" "$AV_HDMI_CONNECTOR"'

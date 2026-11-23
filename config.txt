@@ -53,6 +53,14 @@ samplerate = 48000
 # False → no automatic restart
 daily_restart = True
 
+# Has this frame been delivered to its home?
+# False → still being set up / tested: logs are written straight to the SD
+#         card (log2ram off), so unplugging it never loses the logs of a boot.
+# True  → deployed: logs live in RAM (log2ram) and are copied to the SD card
+#         every 15 min, to spare the card. Set it before handing the frame over.
+# Applies on the next reboot (tools/log2ram-condition.sh).
+deployed = False
+
 [Scoring]
 # True → the frame picks the next photo by score (see app/scoring.py)
 # False → photos are shown in sequential order

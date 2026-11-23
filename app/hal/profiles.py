@@ -80,13 +80,21 @@ class DisplayProfile:
     image_canvas: tuple[int, int]
     video_canvas: tuple[int, int]
     todo: tuple[str, ...]
+    # Which HDMI connector the panel is on. None (key absent): the SBC profile's
+    # connector, as before. "auto": whichever HDMI port reports a connected panel
+    # at start-up (app/hal/drm.py); picture and sound both follow it.
+    hdmi_connector: str | None = None
 
     @classmethod
     def from_dict(cls, data: dict) -> "DisplayProfile":
         where = f"display profile '{data.get('id', '?')}'"
         canvas = _req(data, "media_canvas", where) or {}
         width = _req(data, "panel_width_mm", where)
+        hdmi = data.get("hdmi_connector")
+        if hdmi is not None and not (hdmi == "auto" or str(hdmi).startswith("HDMI-")):
+            raise ProfileError(f"{where}: hdmi_connector must be 'auto' or a connector like HDMI-A-1, got {hdmi!r}")
         return cls(
+            hdmi_connector=None if hdmi is None else str(hdmi),
             id=str(_req(data, "id", where)),
             name=str(_req(data, "name", where)),
             status=str(_req(data, "status", where)),

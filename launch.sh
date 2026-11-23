@@ -8,9 +8,26 @@ source venv/bin/activate
 # Board-specific names (HDMI connector, PipeWire node patterns) from the
 # hardware profile (device.conf + profiles/). The literals below are the rpi4
 # values, used if the HAL can't run.
-HAL_ENV=$(python3 -m app.hal env 2>/dev/null) && eval "$HAL_ENV"
+# --wait-display: a panel on "hdmi_connector: auto" may still be waking up;
+# give it up to 20 s to report which HDMI port it's on (returns at once if it
+# already has, and is ignored by fixed-connector panels).
+HAL_ENV=$(python3 -m app.hal env --wait-display 20 2>/dev/null) && eval "$HAL_ENV"
 HDMI_CONNECTOR="${AV_HDMI_CONNECTOR:-HDMI-A-1}"
 PANEL_RESET="${AV_PANEL_RESET:-1}"   # 1 = LCDwiki-style fragile panel (legacy default)
+
+# The DRM card the viewer must open. The kernel numbers vc4 (display) and v3d
+# (render-only) in probe order, which can change from one boot to the next; the
+# service's fixed SDL_KMSDRM_DEVICE_INDEX=1 then points at v3d and the viewer
+# dies on every start for that whole boot. The HAL reports the card that has the
+# connectors; the service value stays as the fallback.
+export SDL_KMSDRM_DEVICE_INDEX="${AV_KMSDRM_DEVICE_INDEX:-${SDL_KMSDRM_DEVICE_INDEX:-1}}"
+
+# One line per start in the app's own startup log (on the SD card, so it
+# survives an unplug even when log2ram holds the journal in RAM).
+launch_log() {
+    mkdir -p app/logs
+    printf '%s | INFO     | LAUNCH | %s\n' "$(date '+%Y-%m-%d %H:%M:%S,%3N')" "$*" >> app/logs/startup.log 2>/dev/null || true
+}
 
 # Re-present the HDMI signal once per boot, before the viewer takes the display.
 # The panel sometimes misses a signal that was already running when it finished
@@ -43,7 +60,9 @@ for o in json.load(sys.stdin):
         break
 ' "$1" "$2" 2>/dev/null
 }
-HDMI_SINK_RE="${AV_HDMI_SINK_RE:-^alsa_output\.platform-fef00700\.hdmi\.}"   # rpi4: HDMI0 = HDMI-A-1 = the panel
+# The HDMI sink of the same port as the picture (the HAL maps the connector to
+# its sink). Literal = rpi4 HDMI0 = HDMI-A-1, if the HAL can't run.
+HDMI_SINK_RE="${AV_HDMI_SINK_RE:-^alsa_output\.platform-fef00700\.hdmi\.}"
 USB_MIC_RE="${AV_MIC_SOURCE_RE:-^alsa_input\.usb-}"
 
 # The HDMI sink can disappear from PipeWire if the display re-reads its EDID
@@ -65,6 +84,9 @@ SINK_ID=$(pw_node_id Audio/Sink "$HDMI_SINK_RE")
 [[ -n "$SINK_ID" ]] && wpctl set-default "$SINK_ID" 2>/dev/null
 MIC_ID=$(pw_node_id Audio/Source "$USB_MIC_RE")
 [[ -n "$MIC_ID" ]] && wpctl set-default "$MIC_ID" 2>/dev/null
+
+launch_log "Display: /dev/dri/card${SDL_KMSDRM_DEVICE_INDEX}, ${HDMI_CONNECTOR} (${AV_DISPLAY:-?})." \
+    "Audio: ${HDMI_SINK_RE} -> sink ${SINK_ID:-NOT FOUND}"
 
 echo "Starting AmonaVision..."
 python start.py

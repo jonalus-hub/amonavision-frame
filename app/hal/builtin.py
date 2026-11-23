@@ -33,6 +33,18 @@ RPI4 = {
         "hdmi_pipewire_device": "alsa_card.platform-fef00700.hdmi",
         "hdmi_alsa_card": "vc4hdmi0",
         "mic_source_pattern": r"^alsa_input\.usb-",
+        "hdmi_ports": {
+            "HDMI-A-1": {
+                "hdmi_sink_pattern": r"^alsa_output\.platform-fef00700\.hdmi\.",
+                "hdmi_pipewire_device": "alsa_card.platform-fef00700.hdmi",
+                "hdmi_alsa_card": "vc4hdmi0",
+            },
+            "HDMI-A-2": {
+                "hdmi_sink_pattern": r"^alsa_output\.platform-fef05700\.hdmi\.",
+                "hdmi_pipewire_device": "alsa_card.platform-fef05700.hdmi",
+                "hdmi_alsa_card": "vc4hdmi1",
+            },
+        },
     },
     "thermal": {"path": "/sys/class/thermal/thermal_zone0/temp", "throttling": "unavailable"},
     "fan": {"pwm_chip": "/sys/class/pwm/pwmchip0", "pwm_channel": 0, "period_ns": 40000},

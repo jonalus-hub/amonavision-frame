@@ -11,6 +11,12 @@ status: unverified
 # turns out to need the LCDwiki-style hand-holding, flip this to true.)
 panel_reset: false
 
+# Plugged into either micro-HDMI port of the Pi: the frame looks at start-up for
+# the port that reports a connected panel, and sends both the picture and the
+# sound there. (The LCDwiki can't do this: its mode + EDID are forced on one
+# fixed connector at boot.)
+hdmi_connector: auto
+
 native_size: [1920, 1280]
 connector: mini-hdmi       # TODO: USB-C input too — DisplayPort alt mode?
 kernel_mode: null          # TODO: does it need a forced video= mode?

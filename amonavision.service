@@ -17,10 +17,13 @@ User=__APP_USER__
 Group=__APP_USER__
 WorkingDirectory=__APP_DIR__
 Environment=SDL_VIDEODRIVER=kmsdrm
-# card0 is the v3d render-only GPU node (no display capability); card1 is the
-# actual vc4 KMS display device. Without this, SDL's auto-detection tries
-# card0 first, finds no usable CRTC, and gives up with "kmsdrm not available"
-# instead of falling through to card1.
+# Usually card0 is the v3d render-only GPU node (no display capability) and
+# card1 the actual vc4 KMS display device. Without an index, SDL's
+# auto-detection tries card0 first, finds no usable CRTC, and gives up with
+# "kmsdrm not available" instead of falling through to card1. The numbering
+# follows the kernel's probe order and can swap on some boots, so launch.sh
+# overrides this with the card the HAL finds the connectors on; 1 is only the
+# fallback if that detection can't run.
 Environment=SDL_KMSDRM_DEVICE_INDEX=1
 # Audio must go through PipeWire, never straight to ALSA: the viewer has two
 # separate SDL audio clients (pygame's mixer for voice notes, ffpyplayer's own

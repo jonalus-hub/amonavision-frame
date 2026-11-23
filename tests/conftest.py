@@ -32,8 +32,10 @@ def _clear_caches():
 @pytest.fixture(autouse=True)
 def isolated_selection(tmp_path, monkeypatch):
     """Point device.conf at a file that doesn't exist (= defaults) and reset
-    the cached selection around every test."""
+    the cached selection around every test. /sys/class/drm too: the test
+    machine's own graphics card must not leak into the HAL's answers."""
     monkeypatch.setenv("AMONAVISION_DEVICE_CONF", str(tmp_path / "no-device.conf"))
+    monkeypatch.setenv("AMONAVISION_SYS_DRM", str(tmp_path / "no-sys-drm"))
     monkeypatch.delenv("AMONAVISION_HAL_IMPL", raising=False)
     _clear_caches()
     yield

@@ -7,6 +7,7 @@ Profile: `profiles/display/hgfrtee-12.3.yaml`
 |---|---|---|
 | Native resolution | 1920 x 1280 (15:10) | known |
 | Inputs | mini-HDMI, USB-C | known; TODO: is USB-C DisplayPort alt mode? |
+| HDMI port on the board | either: `hdmi_connector: auto` — at start-up the frame uses the port that reports a connected panel and sends the sound out of the same port | verified on AmonaVision3 (HDMI-A-2) |
 | Forced mode / EDID | — | TODO: does it need them? Dump its EDID |
 | USB touch controller | — | TODO: does it expose one (needs a `usbhid.quirks` like the LCDwiki)? |
 | Picture width | — | TODO: measure; then set `config.txt [Overlay] panel_width_mm` (config.txt overrides the profile) |

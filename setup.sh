@@ -285,7 +285,8 @@ if [[ "$PANEL_RESET" == "1" ]]; then
     pin_cmdline "video=${HDMI_CONNECTOR}:" "video=${HDMI_CONNECTOR}:1024x600M@60D"
     pin_cmdline "drm.edid_firmware=" "drm.edid_firmware=${HDMI_CONNECTOR}:edid/amona.bin"
 else
-    unpin_cmdline "video=${HDMI_CONNECTOR}:"
+    # Any HDMI port: such a panel may sit on either one (hdmi_connector: auto).
+    unpin_cmdline "video=HDMI-A-"
     unpin_cmdline "drm.edid_firmware="
 fi
 # usbcore.autosuspend=-1: disable USB autosuspend at kernel level — more
@@ -431,7 +432,28 @@ cat > /etc/systemd/system/log2ram-daily.timer.d/override.conf << 'EOF'
 OnCalendar=
 OnCalendar=*:0/15
 EOF
-ok "log2ram configured."
+# log2ram only on a deployed frame (config.txt [System] deployed = True). While
+# the frame is being set up it is unplugged all the time, and each unplug would
+# lose that boot's logs from RAM; with log2ram skipped, /var/log (the journal
+# included) is written straight to the SD card. ExecCondition makes systemd
+# skip the unit, not fail it. Takes effect on the next boot.
+mkdir -p /etc/systemd/system/log2ram.service.d /etc/systemd/system/log2ram-daily.service.d
+cat > /etc/systemd/system/log2ram.service.d/amonavision-deployed.conf << EOF
+[Service]
+ExecCondition=/bin/sh ${APP_DIR}/tools/log2ram-condition.sh ${APP_DIR}/config.txt
+EOF
+# The 15-min sync is a "systemctl reload log2ram": nothing to sync (and an
+# error every 15 min) when log2ram was skipped.
+cat > /etc/systemd/system/log2ram-daily.service.d/amonavision-deployed.conf << 'EOF'
+[Service]
+ExecCondition=/bin/systemctl -q is-active log2ram.service
+EOF
+systemctl daemon-reload
+if sh "$APP_DIR/tools/log2ram-condition.sh" "$APP_DIR/config.txt"; then
+    ok "log2ram configured (frame deployed: logs in RAM, SD sync every 15 min)."
+else
+    ok "log2ram configured, but OFF until config.txt [System] deployed = True (logs go straight to the SD card)."
+fi
 
 # ── Step 8: USB autosuspend ───────────────────────────────────────────────────
 step "Disabling USB autosuspend (keeps 4G dongle and USB-powered display alive)..."

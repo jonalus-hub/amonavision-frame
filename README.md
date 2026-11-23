@@ -230,7 +230,7 @@ The script configures:
 | Hardware watchdog | Reboots the Pi automatically if the app hangs |
 | journald | persistent (survives reboots), 192 MB cap; log2ram RAM raised to 300 MB to fit |
 | Raspberry Pi Connect | disabled — `rpi-connect-wayvnc` crash-loops on a kmsdrm frame; Tailscale covers remote access |
-| log2ram | Logs live in RAM, synced to SD card every 15 min (`log2ram-daily.timer` override) — a power cut loses at most 15 min of logs |
+| log2ram | Only on a **deployed** frame (`config.txt [System] deployed = True`): logs live in RAM, synced to SD card every 15 min (`log2ram-daily.timer` override) — a power cut loses at most 15 min of logs. While `deployed = False` (set-up / testing) log2ram is skipped and logs go straight to the SD card, so unplugging never loses them. Applies on the next reboot |
 | USB autosuspend | Disabled so the 4G dongle never drops |
 | HDMI forced on | `video=HDMI-A-1:1024x600M@60D drm.edid_firmware=HDMI-A-1:edid/amona.bin` in `cmdline.txt` (connector set by `HDMI_CONNECTOR` in `setup.sh`, backup taken before any change); the panel's EDID at `/lib/firmware/edid/amona.bin` (repo: `config/edid/amona.bin`) and inside the initramfs via `/etc/initramfs-tools/hooks/amona-edid`. The frame drives the panel (video + HDMI audio) even if the panel wasn't ready when the Pi booted. The Pi 4 can't produce the panel's native 1024x600 timing, so it actually outputs 1920x1080 and the panel scales. The panel sometimes misses a signal that was already running when it finished booting ("No signal" until the cable is re-plugged), so `launch.sh` re-presents it once per boot (`tools/hdmi-resync.py`: output off 3 s, back on). The panel is powered from the Pi's USB, which stays on across a software reboot; if one leaves it on "No signal", `/screen` (admin chat only) cuts USB power for 10 s with `uhubctl` (`tools/panel-power-cycle.sh` via `amonavision-panel-reset.path`) — the 4G dongle and mic drop with it for ~1 min, since the Pi 4's ports are ganged. The same power-cycle runs automatically ~45 s after every boot, cold or not (`amonavision-reboot-panel-cycle.service` → `tools/reboot-with-panel-cycle.sh after-boot`; the panel once came up on "No signal" from a cold start too), so the network takes ~1 min longer to come up after a boot. `/reboot` (admin chat only) reboots through `tools/reboot-with-panel-cycle.sh` via `amonavision-reboot.path`. If the HDMI link drops and PipeWire loses its HDMI sink, the 5-min watchdog re-creates it and makes it the default again. Diagnose with `tools/hdmi-diag.sh`; `/test` fails if the output isn't being driven |
 | Wi-Fi power-save | Disabled (`/etc/NetworkManager/conf.d/00-wifi-powersave-off.conf`) — an idle frame otherwise drops/lags |
@@ -378,7 +378,7 @@ Replying `delete` to a photo/video you sent hides it from the frame (the files s
 
 The physical buttons also have their own usage log, `app/logs/buttons.csv` (on the SD card, never rotated): one row per press (button, viewer state, session and photo/video on screen) and one per voice reply with its duration and result (`sent` / `discarded` if shorter than 1 s / `send_error` / …). `/usage` summarises it.
 
-Logs are stored in RAM (`/var/log` via log2ram) and synced to the SD card every 15 minutes to minimise write wear. To read them:
+On a deployed frame (`config.txt [System] deployed = True`) logs are stored in RAM (`/var/log` via log2ram) and synced to the SD card every 15 minutes to minimise write wear; before that they are written straight to the SD card. To read them:
 
 ```bash
 # Application log

@@ -97,11 +97,17 @@ else
     warn "systemd watchdog not configured in system.conf"
 fi
 
-# log2ram
-if systemctl is-active log2ram &>/dev/null; then
-    pass "log2ram is running"
+# log2ram — only on a deployed frame (config.txt [System] deployed)
+if sh "$APP_DIR/tools/log2ram-condition.sh" "$APP_DIR/config.txt" 2>/dev/null; then
+    if systemctl is-active log2ram &>/dev/null; then
+        pass "log2ram is running (frame deployed)"
+    else
+        warn "log2ram is not active (will start after reboot)"
+    fi
+elif systemctl is-active log2ram &>/dev/null; then
+    warn "log2ram is still running but deployed = False — logs go straight to the SD card after the next reboot"
 else
-    warn "log2ram is not active (will start after reboot)"
+    pass "log2ram off: deployed = False, logs written straight to the SD card"
 fi
 
 # journald limits
