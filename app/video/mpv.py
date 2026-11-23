@@ -21,10 +21,12 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import shlex
 import shutil
 import socket
 import subprocess
+import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -52,6 +54,7 @@ TERM_WAIT_S = 2.0              # after SIGTERM, before SIGKILL
 UNKNOWN_DURATION_LIMIT_S = 30 * 60
 STATS_EVERY_S = 2.0
 HWDEC_LOG_MARK = "Using hardware decoding"
+MAX_SOCKET_PATH = 100           # bytes; sun_path is 108 on Linux
 
 _REQ_DURATION, _REQ_HWDEC, _REQ_DROPS, _REQ_DEC_DROPS = 1, 2, 3, 4
 
@@ -224,7 +227,11 @@ class MpvBackend(VideoBackend):
 
     @property
     def socket_path(self) -> Path:
-        return self.run_dir / "mpv.sock"
+        path = self.run_dir / "mpv.sock"
+        if len(str(path).encode()) > MAX_SOCKET_PATH:
+            # A Unix socket path is limited to ~108 bytes
+            path = Path(tempfile.gettempdir()) / f"amonavision-{os.getuid()}-mpv.sock"
+        return path
 
     @property
     def log_path(self) -> Path:

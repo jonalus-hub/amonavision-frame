@@ -391,3 +391,11 @@ def test_ipc_client_talks_json_lines_over_a_unix_socket(tmp_path):
 def test_ipc_connect_fails_quietly_without_a_socket(tmp_path):
     ipc = MpvIpc(tmp_path / "nothing-here")
     assert not ipc.connect() and not ipc.connected and ipc.read_messages() == []
+
+
+def test_a_too_long_run_dir_gets_a_short_socket_path(tmp_path):
+    deep = tmp_path / ("x" * 120)
+    b = MpvBackend(CFG, deep)
+    assert len(str(b.socket_path).encode()) <= 100
+    from pathlib import Path
+    assert MpvBackend(CFG, Path("/run/amonavision")).socket_path == Path("/run/amonavision/mpv.sock")
