@@ -6,10 +6,11 @@ the default and is also what a failed mpv playback falls back to.
 
 from .base import FfpyplayerBackend, VideoBackend, VideoEvent
 from .config import VideoConfig, read_video_config
+from .handoff import DisplayHandoff
 from .mpv import DrmTarget, MpvBackend, MpvUnavailable
 from .runtime import Heartbeat, run_dir
 
 __all__ = [
-    "DrmTarget", "FfpyplayerBackend", "Heartbeat", "MpvBackend", "MpvUnavailable",
+    "DisplayHandoff", "DrmTarget", "FfpyplayerBackend", "Heartbeat", "MpvBackend", "MpvUnavailable",
     "VideoBackend", "VideoConfig", "VideoEvent", "read_video_config", "run_dir",
 ]
