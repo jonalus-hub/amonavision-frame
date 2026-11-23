@@ -32,6 +32,7 @@ AmonaVision/
 │   ├── hal/                    ← Hardware abstraction layer (see "Hardware variants")
 │   ├── scoring.py              ← Picks the next photo/video for the slideshow
 │   ├── usage_log.py            ← Button usage log (app/logs/buttons.csv)
+│   ├── video/                  ← Video players: ffpyplayer (default) or mpv (see "Video playback")
 │   ├── logs/                   ← Runtime logs
 │   └── media/                  ← Received / processed media, voice replies
 ├── web/
@@ -43,7 +44,8 @@ AmonaVision/
 │   ├── hdmi-resync.py          ← Re-presents the HDMI signal once per boot
 │   ├── hdmi-diag.sh            ← HDMI / audio diagnostics report
 │   ├── panel-power-cycle.sh    ← /screen: power-cycles the panel over USB
-│   └── reboot-with-panel-cycle.sh ← /reboot and the after-boot panel power-cycle
+│   ├── reboot-with-panel-cycle.sh ← /reboot and the after-boot panel power-cycle
+│   └── mpv-hwdec-test/         ← Canary test kit for the mpv backend (install, bench, checklist, rollback)
 ├── config/
 │   ├── edid/amona.bin          ← The panel's EDID
 │   ├── initramfs-tools/hooks/  ← Puts the EDID into the initramfs
@@ -62,7 +64,7 @@ AmonaVision/
 ├── setup.sh                    ← One-shot device provisioning script
 ├── test_setup.sh               ← Full diagnostic suite (/test, health check)
 ├── config.txt                  ← Display, GPIO, overlay, scoring and reminder settings
-├── device.conf                 ← Which board + panel this frame is (optional, not in git)
+├── device.conf                 ← Which board + panel this frame is, video player (optional, not in git)
 ├── VERSION                     ← Release number shown in the logs and in /pi
 ├── requirements.txt
 └── .env                        ← Secrets (not in git — see .env.example)
@@ -103,6 +105,28 @@ the declared board, a warning is logged and the frame keeps running. Values in
 `config.txt` (`[GPIO]` pins, `[Audio] samplerate`, `[Overlay] panel_width_mm`)
 still override the profiles. The start-up logs and `/pi` show what was loaded,
 e.g. `Build: v1.0.0 · rpi4 · lcdwiki-10.1-h`.
+
+### Video playback (ffpyplayer or mpv)
+
+By default videos play with ffpyplayer: every frame goes through Python and
+pygame (convert, scale, blit). A `[video]` section in `device.conf` can switch
+a frame to **mpv** instead, which decodes H.264 on the Pi 4's hardware decoder
+(V4L2 M2M) and draws the video itself:
+
+```ini
+[video]
+backend = mpv            # default: ffpyplayer
+mpv_hwdec = v4l2m2m-copy # mpv --hwdec
+mpv_vo = gpu             # gpu (with mpv_gpu_context = drm) | drm
+```
+
+All options are listed in `device.conf.example`. On KMS/DRM the viewer hands
+the screen to mpv and takes it back when the video ends, and keeps reading the
+buttons (they behave exactly as with ffpyplayer) and writing its heartbeat
+(`/run/amonavision/viewer-heartbeat`). If mpv is missing, shows no picture
+within 5 s, crashes, or overruns the video by 10 s, it is killed and that
+video plays with ffpyplayer. Try it on the canary first:
+`tools/mpv-hwdec-test/README.md`.
 
 ### Adding a variant
 

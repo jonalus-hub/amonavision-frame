@@ -17,3 +17,25 @@ display = lcdwiki-10.1-h
 # Wi-Fi is the fallback) | wifi (no 4G dongle; Wi-Fi only). On 'wifi' the
 # liveness watchdog won't treat the absent dongle as a fault or reboot over it.
 net = 4g
+
+# How videos are played. Leave this section out (or backend = ffpyplayer) to
+# keep the current player. Changes apply on the next start of the frame.
+# mpv must be installed (apt install mpv); without it videos use ffpyplayer.
+#[video]
+# ffpyplayer (default: decodes and scales in Python/pygame) | mpv (external
+# player, hardware H.264 decoding, draws the video itself)
+#backend = mpv
+# mpv --hwdec: v4l2m2m-copy (default, the Pi 4's H.264 decoder) | no (software)
+#mpv_hwdec = v4l2m2m-copy
+# mpv --vo: gpu (default, with mpv_gpu_context) | drm
+#mpv_vo = gpu
+#mpv_gpu_context = drm
+# mpv --audio-device: pulse (default = the HDMI sink the frame selects, like ffpyplayer)
+#mpv_audio_device = pulse
+# Screen mode for mpv: auto (default = the mode the frame is already using,
+# no mode switch) | preferred (the panel's preferred mode) | e.g. 1920x1080
+#mpv_drm_mode = auto
+# Give up on mpv (and play the video with ffpyplayer) if it shows no picture
+# within this many seconds, or is still running this long after the video's end
+#mpv_start_timeout = 5
+#mpv_end_grace = 10

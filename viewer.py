@@ -21,6 +21,8 @@ import pygame
 from app import scoring as scoring_engine
 from app import hal
 from app.hal.layout import compute_layout
+from app.video import (DisplayHandoff, DrmTarget, FfpyplayerBackend, Heartbeat, MpvBackend,
+                       VideoEvent, read_video_config, run_dir)
 import imageio_ffmpeg
 import subprocess
 
@@ -99,6 +101,12 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 # before the settings below, which take their hardware defaults from it.
 HW = hal.get_platform()
 logger.info("Build: %s", HW.label())
+
+# Video player (device.conf [video]; ffpyplayer unless it says backend = mpv)
+VIDEO_CONF = read_video_config()
+logger.info("Video backend: %s", VIDEO_CONF.describe())
+# While mpv owns the screen the main loop polls it (and the buttons) this often
+MPV_TICK_SECONDS = 0.05
 
 # Settings from config.txt; any missing key falls back to its default here.
 def _parse_settings(config: configparser.ConfigParser) -> dict:
@@ -367,6 +375,7 @@ class ViewerApp:
             flags = pygame.DOUBLEBUF
 
         self.screen = pygame.display.set_mode((self.w, self.h), flags)
+        self._display_flags = flags   # to reopen the display the same way after an mpv video
         # UI sizes scaled to this resolution (identical to the original design at 1024x600)
         self._ui = compute_layout(
             self.w, self.h,
@@ -448,13 +457,27 @@ class ViewerApp:
         self.current_image = None
         self.img_x = 0
         self.img_y = 0
-        self.video_player: MediaPlayer | None = None  # ffpyplayer — handles video + audio itself
+        self.video_player: FfpyplayerBackend | None = None  # ffpyplayer — handles video + audio itself
         self.video_path = None           # Path of the active .mp4
         self.audio_path = None           # Path of a paired (external) .ogg voice note
         self.current_video_frame = None  # Last rendered frame
         self.video_x = 0
         self.video_y = 0
         self._video_surf: pygame.Surface | None = None  # Pre-allocated surface reused every frame
+
+        # --- mpv (device.conf [video] backend = mpv) ---
+        # mpv draws the video itself; while it plays (self._mpv set) the main
+        # loop only polls it and the buttons. On KMS/DRM the display is handed
+        # over to it and taken back afterwards (app/video/handoff.py).
+        self._run_dir = run_dir()
+        self._heartbeat = Heartbeat(self._run_dir / "viewer-heartbeat")
+        self._handoff = DisplayHandoff()
+        self._mpv_backend = MpvBackend(VIDEO_CONF, self._run_dir) if VIDEO_CONF.backend == "mpv" else None
+        self._mpv: MpvBackend | None = None          # set while mpv is playing
+        self._mpv_failed_videos: set[str] = set()   # these play with ffpyplayer from now on
+        if self._mpv_backend is not None and not self._mpv_backend.available():
+            logger.warning("Video backend: mpv selected but '%s' is not installed — videos use ffpyplayer",
+                           VIDEO_CONF.mpv_binary)
 
         # Brightness overlay (software dimming, 0-100)
         self._brightness = 100
@@ -899,8 +922,8 @@ class ViewerApp:
     # ------------------------------------------------------------------
     # Video player (ffpyplayer) helpers
     # ------------------------------------------------------------------
-    def _close_video_player(self):
-        """Close and release the current MediaPlayer, if any."""
+    def _close_video_player(self, restore_display: bool = True):
+        """Close and release the current video player (ffpyplayer or mpv), if any."""
         if self.video_player is not None:
             try:
                 self.video_player.close_player()
@@ -909,6 +932,173 @@ class ViewerApp:
                 logger.warning(f"Error closing MediaPlayer: {e}")
             finally:
                 self.video_player = None
+        if self._mpv is not None:
+            mpv, self._mpv = self._mpv, None
+            try:
+                mpv.stop()
+            except Exception:
+                logger.exception("Error stopping mpv")
+            if restore_display:
+                self._restore_display()
+
+    def _open_ffpyplayer_video(self, video_path: Path, has_external_voice: bool) -> bool:
+        """Open video_path with ffpyplayer (the default player, and mpv's fallback)."""
+        try:
+            self._close_video_player()
+            self._video_surf = None  # Reset pre-allocated surface for new video
+            player = FfpyplayerBackend(HW.video.ff_opts, player_factory=MediaPlayer)
+            player.play(video_path, mute=has_external_voice)
+            self.video_player = player
+            self.current_video_frame = None
+            logger.info(
+                f"MediaPlayer opened: {video_path.name} "
+                f"(audio={'external .ogg' if has_external_voice else 'internal'})"
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Error opening MediaPlayer for {video_path}: {e}")
+            self.video_player = None
+            return False
+
+    # ------------------------------------------------------------------
+    # mpv (device.conf [video] backend = mpv)
+    # ------------------------------------------------------------------
+    def _dim_factor(self) -> float:
+        """The factor the dimming overlay scales the picture by (1.0 = not dimmed)."""
+        if self._brightness >= 100:
+            return 1.0
+        return 1.0 - int((1 - self._brightness / 100) * 255) / 255
+
+    def _drm_target(self) -> DrmTarget:
+        """Where mpv draws: the card and HDMI port pygame is on, in the mode pygame uses."""
+        index = os.environ.get("SDL_KMSDRM_DEVICE_INDEX")
+        device = f"/dev/dri/card{index}" if index and index.isdigit() else None
+        try:
+            connector = HW.hdmi_connector()
+        except Exception as e:
+            logger.warning("Can't tell the HDMI connector for mpv (%s) — mpv picks one", e)
+            connector = None
+        mode = VIDEO_CONF.mpv_drm_mode
+        if mode == "auto":
+            mode = f"{self.w}x{self.h}"
+        elif mode == "preferred":
+            mode = None
+        return DrmTarget(device=device, connector=connector, mode=mode)
+
+    def _start_mpv_video(self, video_path: Path, has_external_voice: bool) -> bool:
+        """Play video_path with mpv. False = play it with ffpyplayer instead."""
+        mpv = self._mpv_backend
+        if mpv is None:
+            return False
+        reason = None
+        if str(video_path) in self._mpv_failed_videos:
+            reason = "mpv failed on this video before"
+        elif not mpv.available():
+            reason = f"'{VIDEO_CONF.mpv_binary}' is not installed"
+        elif self._brightness < 100 and not mpv.can_dim:
+            reason = f"screen dimmed to {self._brightness}% and vo={VIDEO_CONF.mpv_vo} can't dim"
+        if reason:
+            logger.info("Video backend: ffpyplayer for %s (%s)", video_path.name, reason)
+            return False
+
+        self._close_video_player()
+        release = self._handoff.must_release()
+        try:
+            drm = self._drm_target() if release else None
+            if release:
+                self._handoff.release()
+            mpv.play(video_path, mute=has_external_voice, drm=drm,
+                     dim_factor=self._dim_factor(), ontop=not release)
+        except Exception as e:
+            logger.error("Video backend: mpv could not start %s (%s) — falling back to ffpyplayer",
+                         video_path.name, e)
+            self._mpv_failed_videos.add(str(video_path))
+            self._restore_display()
+            return False
+        self._mpv = mpv
+        self.current_video_frame = None
+        logger.info("Video backend: mpv for %s", video_path.name)
+        return True
+
+    def _restore_display(self):
+        """Take the screen back from mpv and show the cover straight away."""
+        if not self._handoff.released:
+            return
+        t0 = time.time()
+        try:
+            self.screen = self._handoff.restore((self.w, self.h), self._display_flags)
+        except Exception:
+            # Without a display the viewer can't go on: exit and let systemd
+            # (Restart=always) start the frame again.
+            logger.critical("Could not take the screen back from mpv — exiting for a restart",
+                            exc_info=True)
+            raise SystemExit(1)
+        # The main loop may sleep up to 1 s before its next redraw: paint the
+        # cover (dimmed like draw() would) now so the screen isn't left black.
+        self.screen.fill(self.bg_color)
+        if self.current_image is not None:
+            self.screen.blit(self.current_image, (self.img_x, self.img_y))
+        if self._brightness < 100 and self._dim_overlay is not None:
+            self.screen.blit(self._dim_overlay, (0, 0))
+        pygame.display.flip()
+        self._needs_redraw = True
+        logger.info("Display back from mpv in %.2f s", time.time() - t0)
+
+    def _finish_mpv(self, failed: bool):
+        """mpv exited on its own (end of video) or failed; recover the UI."""
+        mpv, self._mpv = self._mpv, None
+        if mpv is None:
+            return
+        mpv.stop()   # no-op once it has exited; makes sure it has
+        run = mpv.last_run
+        self._restore_display()
+        if failed:
+            self._mpv_failed_videos.add(str(self.video_path))
+            logger.warning("Video backend: mpv failed on %s (%s) — playing it with ffpyplayer",
+                           self.video_path.name if self.video_path else "?",
+                           (run.failure if run else None) or "unknown error")
+            if (self.state == "PLAYING" and self.video_path
+                    and self._open_ffpyplayer_video(self.video_path, bool(self.audio_path))):
+                return
+        # Same as ffpyplayer's end of video (or its open error)
+        self.state = "WAITING_ACTION"
+        self.slide_start_time = time.time()
+        self._last_input_time = time.time()
+        self._needs_redraw = True
+
+    def _mpv_tick(self) -> bool:
+        """One main-loop pass while mpv plays. Returns False to quit the viewer."""
+        running = True
+        # Buttons straight from the GPIO queue: pygame's event queue is down
+        # while mpv holds the display. Stop as soon as a press ended the video;
+        # the rest of the queue goes through the normal path.
+        while self._mpv is not None and not self._gpio_queue.empty():
+            try:
+                event_type, key = self._gpio_queue.get_nowait()
+            except queue.Empty:
+                break
+            if event_type == pygame.KEYDOWN:
+                self._on_key_down(key)
+            elif event_type == pygame.KEYUP:
+                self._on_key_up(key)
+        # X11/Wayland (dev): pygame keeps its window, so keep its queue drained
+        if self._mpv is not None and pygame.display.get_init():
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
+                elif event.type == pygame.KEYDOWN:
+                    self._on_key_down(event.key)
+                elif event.type == pygame.KEYUP:
+                    self._on_key_up(event.key)
+        if self._mpv is not None:
+            for ev in self._mpv.poll():
+                if ev is VideoEvent.ENDED:
+                    self._finish_mpv(failed=False)
+                elif ev is VideoEvent.FAILED:
+                    self._finish_mpv(failed=True)
+        if self._mpv is not None:
+            time.sleep(MPV_TICK_SECONDS)
+        return running
 
     def _start_bg_thumbnail_extraction(self, video_path: Path, persistent_thumb_path: Path, ram_thumb_path: Path):
         """Extract a thumbnail in a background thread."""
@@ -1221,21 +1411,10 @@ class ViewerApp:
 
         if self.video_path:
             has_external_voice = bool(self.audio_path)
-            ff_opts = HW.video.ff_opts(has_external_voice)
-            try:
-                self._close_video_player()
-                self._video_surf = None  # Reset pre-allocated surface for new video
-                self.video_player = MediaPlayer(str(self.video_path), ff_opts=ff_opts)
-                self.current_video_frame = None
-                logger.info(
-                    f"MediaPlayer opened: {self.video_path.name} "
-                    f"(audio={'external .ogg' if has_external_voice else 'internal'})"
-                )
-            except Exception as e:
-                logger.error(f"Error opening MediaPlayer for {self.video_path}: {e}")
-                self.video_player = None
-                self.state = "WAITING_ACTION"
-                return
+            if not self._start_mpv_video(self.video_path, has_external_voice):
+                if not self._open_ffpyplayer_video(self.video_path, has_external_voice):
+                    self.state = "WAITING_ACTION"
+                    return
 
         if self.audio_path:
             # Paired voice note (.ogg) — convert to a temporary WAV for pygame.mixer
@@ -1573,6 +1752,67 @@ class ViewerApp:
 
         pygame.display.flip()
 
+    def _on_key_down(self, key):
+        """A button press (GPIO or keyboard) — the same in every state and with either player."""
+        if self.state != "SPLASH" and key in (
+            pygame.K_SPACE, pygame.K_r, pygame.K_LEFT, pygame.K_RIGHT
+        ):
+            # A real button press — reveal the Play/Reply
+            # hints for a while, whatever else this key
+            # ends up doing in the current state.
+            self._last_input_time = time.time()
+        if key in USAGE_BUTTONS:
+            log_usage("press", USAGE_BUTTONS[key],
+                      state=self.state, session=self.current_session)
+        if self.state == "SPLASH":
+            pass  # ignore all input during startup screen
+        elif key == pygame.K_SPACE:
+            if self.state == "WAITING_ACTION":
+                if not self.audio_path and not self.video_path:
+                    self._no_voice_flash_time = time.time()
+                else:
+                    self.play_current_media()
+            elif self.state == "PLAYING":
+                if self._audio_available:
+                    pygame.mixer.music.stop()
+                self._close_video_player()
+                self.state = "WAITING_ACTION"
+                self.slide_start_time = time.time()
+
+        elif key == pygame.K_r:
+            if not self.is_recording and self.state in ("WAITING_ACTION", "PLAYING"):
+                if self.state == "PLAYING":
+                    if self._audio_available:
+                        pygame.mixer.music.stop()
+                    self._close_video_player()
+                self.start_recording()
+
+        elif key == pygame.K_LEFT:
+            if not self.is_recording and self.state not in ("SPLASH", "RECORDING"):
+                self._no_voice_flash_time = 0.0
+                self.load_previous_valid_session()
+                if self.current_session:
+                    self._nav_was_manual = True
+                    try:
+                        self.db.record_revisit(self.current_session['id'])
+                    except Exception:
+                        pass
+
+        elif key == pygame.K_RIGHT:
+            if not self.is_recording and self.state not in ("SPLASH", "RECORDING"):
+                self._no_voice_flash_time = 0.0
+                self.load_next_valid_session()
+                if self.current_session:
+                    self._nav_was_manual = True
+                    try:
+                        self.db.record_revisit(self.current_session['id'])
+                    except Exception:
+                        pass
+
+    def _on_key_up(self, key):
+        if key == pygame.K_r and self.is_recording:
+            self.stop_recording()
+
     def run(self):
         try:
             running = True
@@ -1660,6 +1900,19 @@ class ViewerApp:
                         self._last_forced_redraw = now_t
                         self._needs_redraw = True
 
+                    # Viewer heartbeat (<run dir>/viewer-heartbeat): the main loop is turning
+                    self._heartbeat.beat(f"{self.state}/mpv" if self._mpv is not None else self.state)
+
+                    # mpv is drawing a video: poll it and the buttons, nothing else
+                    if self._mpv is not None:
+                        try:
+                            if not self._mpv_tick():
+                                running = False
+                        except Exception:
+                            logger.exception("mpv playback error — recovering")
+                            self._finish_mpv(failed=True)
+                        continue
+
                     # Drain the GPIO queue into Pygame events, from the main thread
                     while not self._gpio_queue.empty():
                         try:
@@ -1695,66 +1948,13 @@ class ViewerApp:
                                 self.stop_recording()
                             running = False
                         elif event.type == pygame.KEYDOWN:
-                            if self.state != "SPLASH" and event.key in (
-                                pygame.K_SPACE, pygame.K_r, pygame.K_LEFT, pygame.K_RIGHT
-                            ):
-                                # A real button press — reveal the Play/Reply
-                                # hints for a while, whatever else this key
-                                # ends up doing in the current state.
-                                self._last_input_time = time.time()
-                            if event.key in USAGE_BUTTONS:
-                                log_usage("press", USAGE_BUTTONS[event.key],
-                                          state=self.state, session=self.current_session)
-                            if self.state == "SPLASH":
-                                pass  # ignore all input during startup screen
-                            elif event.key == pygame.K_SPACE:
-                                if self.state == "WAITING_ACTION":
-                                    if not self.audio_path and not self.video_path:
-                                        self._no_voice_flash_time = time.time()
-                                    else:
-                                        self.play_current_media()
-                                elif self.state == "PLAYING":
-                                    if self._audio_available:
-                                        pygame.mixer.music.stop()
-                                    self._close_video_player()
-                                    self.state = "WAITING_ACTION"
-                                    self.slide_start_time = time.time()
-
-                            elif event.key == pygame.K_r:
-                                if not self.is_recording and self.state in ("WAITING_ACTION", "PLAYING"):
-                                    if self.state == "PLAYING":
-                                        if self._audio_available:
-                                            pygame.mixer.music.stop()
-                                        self._close_video_player()
-                                    self.start_recording()
-
-                            elif event.key == pygame.K_LEFT:
-                                if not self.is_recording and self.state not in ("SPLASH", "RECORDING"):
-                                    self._no_voice_flash_time = 0.0
-                                    self.load_previous_valid_session()
-                                    if self.current_session:
-                                        self._nav_was_manual = True
-                                        try:
-                                            self.db.record_revisit(self.current_session['id'])
-                                        except Exception:
-                                            pass
-
-                            elif event.key == pygame.K_RIGHT:
-                                if not self.is_recording and self.state not in ("SPLASH", "RECORDING"):
-                                    self._no_voice_flash_time = 0.0
-                                    self.load_next_valid_session()
-                                    if self.current_session:
-                                        self._nav_was_manual = True
-                                        try:
-                                            self.db.record_revisit(self.current_session['id'])
-                                        except Exception:
-                                            pass
-
+                            self._on_key_down(event.key)
                         elif event.type == pygame.KEYUP:
-                            if event.key == pygame.K_r and self.is_recording:
-                                self.stop_recording()
+                            self._on_key_up(event.key)
 
-                    if animating_before or self._needs_redraw:
+                    # A press may just have started an mpv video: mpv owns the
+                    # screen now, so there is nothing for pygame to draw.
+                    if (animating_before or self._needs_redraw) and self._mpv is None:
                         self.draw()
                         self._needs_redraw = False
                         # Dropped out of an animating state (video/voice ended, a badge
@@ -1782,7 +1982,7 @@ class ViewerApp:
                 if animating_before and (self.state != "PLAYING" or self.video_player is None):
                     self.clock.tick(30)
         finally:
-            self._close_video_player()
+            self._close_video_player(restore_display=False)
             if self._audio_available:
                 pygame.mixer.music.stop()
             if hasattr(self, 'cache'):
