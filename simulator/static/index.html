@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AmonaVision · simulator</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: #111418; color: #e6e9ee; }
+  header { display: flex; align-items: center; gap: 10px; padding: 10px 18px; border-bottom: 1px solid #222831; }
+  header h1 { font-size: 17px; margin: 0; font-weight: 650; }
+  header .tag { font-size: 12px; background: #2a3340; color: #9fb3c8; padding: 2px 8px; border-radius: 99px; }
+  header .ver { font-size: 12px; color: #7f8b99; margin-left: auto; }
+  header .panel { font-size: 13px; color: #c8d1db; text-decoration: none; background: #222831; border: 1px solid #333c48; padding: 3px 10px; border-radius: 99px; }
+  header .panel:hover { background: #2a3340; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: #c0392b; display: inline-block; }
+  .dot.on { background: #2ecc71; }
+  #banner { margin: 10px 18px 0; padding: 8px 12px; border-radius: 8px; background: #2d2716; color: #f0d58a; font-size: 14px; }
+  #banner:empty { display: none; }
+  #banner a { color: #ffd76a; }
+  #banner button { font: inherit; padding: 3px 10px; border-radius: 6px; border: 0; background: #f0d58a; color: #2d2716; cursor: pointer; }
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 390px; gap: 20px; padding: 16px 18px; max-width: 1550px; margin: 0 auto; }
+  @media (max-width: 1000px) { main { grid-template-columns: 1fr; } #chatCol { height: 75vh !important; } }
+  @media (max-width: 600px) { main { padding: 10px; } header .ver, .under .keys { display: none; } }
+
+  /* The frame, at its real proportions: measured off a straightened photo of
+     it, in units where the screen cutout is 1024 x 600 the frame is
+     1300 x 963. The surface is that photo's own veneer (frame-wood.jpg). */
+  .frameCol { display: flex; flex-direction: column; align-items: center; }
+  .frame { position: relative; width: 100%; max-width: calc((100vh - 150px) * 1.35); aspect-ratio: 1300 / 962.8;
+           container-type: inline-size; border-radius: 7.69% / 10.39%;
+           background: #c87d52 url(/static/frame-wood.jpg) center / 100% 100% no-repeat;
+           box-shadow: inset 0 0 0 1.5px rgba(52, 24, 8, .85), inset 0 0 0.8cqw rgba(70, 30, 8, .3),
+                       0 0.3cqw 0 #6e3b1e, 0 1.8cqw 3.2cqw rgba(0, 0, 0, .6); }
+  .cutout { position: absolute; left: 10.615%; top: 16.421%; width: 78.769%; height: 62.318%;
+            border-radius: 2.25% / 3.83%; overflow: hidden; background: #000; }
+  .cutout::after { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;   /* laser-cut edge */
+                   box-shadow: inset 0 0 0 1.5px rgba(34, 15, 5, .9), inset 0 0.25cqw 0.7cqw rgba(0, 0, 0, .5); }
+  #screen { width: 100%; height: 100%; display: block; }
+  /* 3D-printed caps: matte black, speckled, with the symbol in relief */
+  .key { position: absolute; left: var(--x); top: 91.4%; width: 7.1%; aspect-ratio: 1; padding: 0; border: 0; border-radius: 50%;
+         transform: translate(-50%, -50%); cursor: pointer; touch-action: none; -webkit-tap-highlight-color: transparent;
+         user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+         background:
+           url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.55' numOctaves='2' seed='4'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 7 -4.6'/%3E%3C/filter%3E%3Crect width='100' height='100' filter='url(%23n)' opacity='.32'/%3E%3C/svg%3E") center / 100% 100%,
+           radial-gradient(circle at 38% 30%, #3a3a3a 0%, #1f1f1f 45%, #111 80%, #080808 100%);
+         box-shadow: 0 0.3cqw 0 #060606, 0 0.5cqw 0.9cqw rgba(0, 0, 0, .55),
+                     inset 0 0.12cqw 0.15cqw rgba(255, 255, 255, .15), inset 0 -0.15cqw 0.25cqw rgba(0, 0, 0, .65);
+         transition: transform .05s, box-shadow .05s, filter .05s; }
+  .key::after { content: ""; position: absolute; inset: -38%; border-radius: 50%; }   /* bigger target for fingers */
+  .key svg { width: 100%; height: 100%; display: block; overflow: visible; }
+  .key svg .relief { fill: none; stroke: #2b2b2b; stroke-width: 7; stroke-linecap: round; stroke-linejoin: round;
+                     filter: drop-shadow(0 1.6px 0 rgba(255, 255, 255, .13)) drop-shadow(0 -1.2px 0 rgba(0, 0, 0, .75)); }
+  .key svg .dot { fill: #242424; filter: drop-shadow(0 1.6px 0 rgba(255, 255, 255, .12)) drop-shadow(0 -1px 0 rgba(0, 0, 0, .7)); }
+  .key.pressed { transform: translate(-50%, -50%) translateY(0.22cqw); filter: brightness(.8);
+                 box-shadow: 0 0.08cqw 0 #060606, 0 0.2cqw 0.4cqw rgba(0, 0, 0, .55),
+                             inset 0 0.1cqw 0.15cqw rgba(255, 255, 255, .1), inset 0 -0.1cqw 0.2cqw rgba(0, 0, 0, .65); }
+  .key:focus-visible { outline: 2px solid #6ab3f3; outline-offset: 3px; }
+  .under { display: flex; flex-wrap: wrap; gap: 6px 18px; justify-content: space-between; color: #8a96a3; font-size: 13px; margin-top: 16px;
+           width: 100%; max-width: calc((100vh - 150px) * 1.35); }
+  .under kbd { background: #222831; border: 1px solid #333c48; border-radius: 4px; padding: 0 5px; font: 12px ui-monospace, monospace; color: #c8d1db; }
+  .speaker { display: flex; align-items: center; gap: 8px; }
+  #playing { color: #8fd18f; min-width: 1em; }
+
+  /* The chat */
+  #chatCol { display: flex; flex-direction: column; height: calc(100vh - 92px); background: #17212b; border-radius: 12px; overflow: hidden; }
+  .chatHead { padding: 10px 14px; background: #1f2c3a; font-weight: 600; }
+  .chatHead small { display: block; font-weight: 400; color: #8ea2b6; font-size: 12px; }
+  #msgs { flex: 1; overflow-y: auto; padding: 8px 10px; background: #0e1621; }
+  .msg { max-width: 86%; width: fit-content; background: #182533; border-radius: 12px; padding: 6px 10px 4px; margin: 6px 0; }
+  .msg.mine { margin-left: auto; background: #2b5278; }
+  .msg.flash { outline: 2px solid #6ab3f3; }
+  .who { font-size: 12.5px; font-weight: 650; color: #e8a35c; }
+  .msg.bot .who { color: #6ab3f3; }
+  .msg.frameReply { background: #24331f; }
+  .msg.frameReply .who { color: #9bd47a; }
+  .msg img, .msg video { max-width: 100%; border-radius: 8px; display: block; margin-top: 4px; object-fit: cover; background: #0e1621; }
+  .msg audio { width: 250px; max-width: 100%; margin-top: 4px; display: block; }
+  .text { white-space: normal; word-wrap: break-word; }
+  .text code { background: #0e1621; padding: 0 4px; border-radius: 4px; }
+  .quote { border-left: 3px solid #6ab3f3; padding: 1px 0 1px 7px; margin: 3px 0; font-size: 12.5px; color: #9fb3c8; cursor: pointer; }
+  .meta { font-size: 11px; color: #7f91a4; text-align: right; }
+  .replyBtn { background: none; border: 0; color: #7f91a4; cursor: pointer; font-size: 13px; padding: 0 0 0 6px; }
+  .replyBtn:hover { color: #fff; }
+  #replyBar { display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: #1f2c3a; border-top: 1px solid #0e1621; font-size: 13px; color: #9fb3c8; }
+  #replyBar[hidden] { display: none; }
+  #replyBar span { flex: 1; border-left: 3px solid #6ab3f3; padding-left: 7px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #replyBar button { background: none; border: 0; color: #9fb3c8; cursor: pointer; font-size: 15px; }
+  #composer { display: flex; gap: 6px; padding: 8px; background: #17212b; align-items: center; }
+  #composer input { background: #0e1621; border: 1px solid #2a3a4b; color: #e6e9ee; border-radius: 8px; padding: 8px; font: inherit; min-width: 0; }
+  #sender { width: 78px; }
+  #text { flex: 1; }
+  .iconBtn { background: #2b5278; border: 0; color: #fff; border-radius: 8px; height: 36px; min-width: 36px; cursor: pointer; font-size: 16px;
+             display: inline-flex; align-items: center; justify-content: center; user-select: none; touch-action: none; }
+  .iconBtn.recording { background: #c0392b; }
+  #status { font-size: 12px; color: #8ea2b6; padding: 0 12px 6px; min-height: 1.2em; }
+</style>
+</head>
+<body>
+<header>
+  <h1>AmonaVision</h1><span class="tag">simulator</span>
+  <span class="ver" id="ver"></span>
+  <a class="panel" id="panelLink" target="_blank" title="The frame's settings dashboard (the same one the Pi runs)">⚙️ Dashboard</a>
+  <span class="dot" id="conn" title="Connection to the simulator"></span>
+</header>
+<div id="banner"></div>
+<main>
+  <section class="frameCol">
+    <div class="frame">
+      <div class="cutout"><img id="screen" src="/stream.mjpg" alt="Frame screen"></div>
+      <!-- x: centre of each button as a share of the frame width, measured off the photo -->
+      <button class="key" data-key="left" style="--x: 29.70%" title="Previous (←)" aria-label="Previous">
+        <svg viewBox="0 0 100 100"><path class="relief" d="M57 31 L39 50 L57 69"/></svg></button>
+      <button class="key" data-key="play" style="--x: 43.90%" title="Play / stop (Space)" aria-label="Play">
+        <svg viewBox="0 0 100 100"><path class="relief" d="M40 32 L66 50 L40 68 Z"/></svg></button>
+      <button class="key" data-key="rec" style="--x: 58.08%" title="Hold to record a reply (R)" aria-label="Record">
+        <svg viewBox="0 0 100 100"><circle class="relief" cx="50" cy="50" r="30" style="stroke-width: 5"/><circle class="dot" cx="50" cy="50" r="17"/></svg></button>
+      <button class="key" data-key="right" style="--x: 72.31%" title="Next (→)" aria-label="Next">
+        <svg viewBox="0 0 100 100"><path class="relief" d="M43 31 L61 50 L43 69"/></svg></button>
+    </div>
+    <div class="under">
+      <span class="keys"><kbd>←</kbd> <kbd>→</kbd> browse · <kbd>Space</kbd> play · hold <kbd>R</kbd> or ● to reply by voice</span>
+      <span class="speaker">🔊 <input type="range" id="vol" min="0" max="1" step="0.05" value="0.9" title="Frame speaker volume"><span id="playing"></span></span>
+    </div>
+  </section>
+
+  <section id="chatCol">
+    <div class="chatHead">👨‍👩‍👧‍👦 Family
+      <small>Simulated Telegram group: what you send goes through the real bot</small></div>
+    <div id="msgs"></div>
+    <div id="replyBar" hidden><span id="replyText"></span><button id="replyCancel" title="Cancel">✕</button></div>
+    <form id="composer" autocomplete="off">
+      <input id="sender" list="names" placeholder="Name" maxlength="32" title="Who is sending">
+      <datalist id="names"><option>Dan<option>Emma<option>Leo<option>Sara<option>Noah</datalist>
+      <label class="iconBtn" title="Send a photo or video">📎<input type="file" id="file" accept="image/*,video/*" hidden></label>
+      <input id="text" placeholder="Message or /command" title="Reply to a photo with “delete” to hide it">
+      <button type="button" class="iconBtn" id="voiceBtn" title="Hold to record a voice note">🎙️</button>
+      <button type="submit" class="iconBtn" title="Send">➤</button>
+    </form>
+    <div id="status"></div>
+  </section>
+</main>
+<audio id="frameAudio" preload="auto"></audio>
+
+<script>
+const $ = s => document.querySelector(s);
+const micSupported = window.isSecureContext && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+let messages = [], replyTo = null, info = {}, micStream = null, wasDown = false, stick = true;
+
+/* ---------- helpers ---------- */
+// Every POST carries this header: the simulator refuses POSTs without it, so another
+// site can't make a visitor's browser drive the frame (a plain form can't set it).
+const SIM_HEADER = { 'X-Requested-With': 'amonavision-sim' };
+const post = (url, body, headers) => fetch(url, { method: 'POST', body, headers: { ...SIM_HEADER, ...headers } });
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const fmt = s => esc(s).replace(/\*([^*\n]+)\*/g, '<b>$1</b>').replace(/(^|\s)_([^_\n]+)_/g, '$1<i>$2</i>')
+                       .replace(/`([^`\n]+)`/g, '<code>$1</code>').replace(/\n/g, '<br>');
+const summary = m => ({ photo: '📷 Photo', video: '🎬 Video', voice: '🎙️ Voice note' }[m.kind]) || (m.text || '').slice(0, 70);
+const whoOf = m => m.from_frame ? 'AmonaVision · 🖼️ reply from the frame' : m.sender;
+const status = t => { $('#status').textContent = t || ''; };
+
+async function getMic() {
+  if (!micStream) micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+  $('#banner').textContent = '';
+  return micStream;
+}
+
+function micBanner() {
+  if (!micSupported) {
+    const url = `https://${location.hostname}:${info.https_port || 8443}/`;
+    $('#banner').innerHTML = `🎤 The microphone (the ● button and voice notes) only works over HTTPS: ` +
+      `<a href="${url}">open the HTTPS version</a> and accept the certificate warning (it is self-signed).`;
+  } else if (!micStream) {
+    $('#banner').innerHTML = `<button id="micBtn">🎤 Turn on the microphone</button> to reply with the ● button and send voice notes.`;
+    $('#micBtn').onclick = () => getMic().catch(() => { $('#banner').textContent = '🎤 Microphone permission denied.'; });
+  }
+}
+
+function recorder(stream) {
+  const r = new MediaRecorder(stream), chunks = [];
+  r.ondataavailable = e => e.data.size && chunks.push(e.data);
+  r.done = new Promise(res => { r.onstop = () => res(new Blob(chunks, { type: r.mimeType })); });
+  r.start();
+  return r;
+}
+
+/* ---------- frame buttons ---------- */
+const keyEl = k => document.querySelector(`.key[data-key="${k}"]`);
+const pressed = {};
+function sendButton(name, down) {
+  return post('/api/button', JSON.stringify({ name, down }), { 'Content-Type': 'application/json' });
+}
+function keyDown(k) {
+  if (pressed[k]) return;
+  pressed[k] = true; keyEl(k).classList.add('pressed');
+  if (k === 'rec') return recDown();
+  sendButton(k, true);
+}
+function keyUp(k) {
+  if (!pressed[k]) return;
+  pressed[k] = false; keyEl(k).classList.remove('pressed');
+  if (k === 'rec') return recUp();
+  sendButton(k, false);
+}
+
+// Hold-to-record, like the real button: KEYDOWN starts the viewer's recording;
+// on release the browser's audio is uploaded and fed to it before the KEYUP.
+const rec = { down: null, rec: null, active: false };
+async function recDown() {
+  rec.active = true; rec.rec = null;
+  rec.down = sendButton('rec', true);
+  if (!micSupported) return;
+  try {
+    const s = await getMic();
+    if (rec.active) rec.rec = recorder(s);
+  } catch { micBanner(); }
+}
+async function recUp() {
+  rec.active = false;
+  const r = rec.rec;
+  await rec.down;
+  if (r && r.state !== 'inactive') {
+    r.stop();
+    const blob = await r.done;
+    post('/api/rec-release', blob, { 'Content-Type': blob.type || 'application/octet-stream' });
+  } else {
+    post('/api/rec-release', null);
+  }
+}
+
+document.querySelectorAll('.key').forEach(el => {
+  const k = el.dataset.key;
+  el.addEventListener('pointerdown', e => { e.preventDefault(); try { el.setPointerCapture(e.pointerId); } catch {} keyDown(k); });
+  el.addEventListener('pointerup', () => keyUp(k));
+  el.addEventListener('pointercancel', () => keyUp(k));
+  el.addEventListener('contextmenu', e => e.preventDefault());
+});
+const KEYMAP = { ArrowLeft: 'left', ArrowRight: 'right', ' ': 'play', r: 'rec', R: 'rec' };
+document.addEventListener('keydown', e => {
+  const k = KEYMAP[e.key];
+  if (!k || e.target.matches('input, textarea')) return;
+  e.preventDefault();
+  if (!e.repeat) keyDown(k);
+});
+document.addEventListener('keyup', e => {
+  const k = KEYMAP[e.key];
+  if (k && !e.target.matches('input, textarea')) keyUp(k);
+});
+window.addEventListener('blur', () => Object.keys(pressed).forEach(keyUp));
+
+/* ---------- frame speaker ---------- */
+const fa = $('#frameAudio');
+$('#vol').oninput = () => { fa.volume = +$('#vol').value; };
+function onAudio(ev) {
+  if (ev.action === 'play') {
+    fa.src = ev.url; fa.volume = +$('#vol').value;
+    $('#playing').textContent = '♪';
+    fa.play().catch(() => { $('#playing').textContent = '🔇 click the page to turn on sound'; });
+  } else {
+    fa.pause(); fa.removeAttribute('src'); fa.load();
+    $('#playing').textContent = '';
+  }
+}
+fa.onended = () => { $('#playing').textContent = ''; };
+
+/* ---------- chat ---------- */
+// Keep the chat pinned to the newest message while media finishes loading,
+// unless the user has scrolled up to read.
+const toBottom = () => { const b = $('#msgs'); b.scrollTop = b.scrollHeight; };
+$('#msgs').addEventListener('scroll', () => { const b = $('#msgs'); stick = b.scrollHeight - b.scrollTop - b.clientHeight < 80; });
+const mediaBox = m => {   // reserve the media's space up front so nothing shifts when it loads
+  const w = m.w || 16, h = m.h || 9, s = Math.min(320 / w, 280 / h);
+  return `style="width:${Math.round(w * s)}px;height:${Math.round(h * s)}px"`;
+};
+function render() {
+  $('#msgs').innerHTML = '';
+  messages.forEach(m => $('#msgs').appendChild(msgEl(m)));
+  toBottom(); stick = true;
+}
+function msgEl(m) {
+  const el = document.createElement('div');
+  const mine = !m.bot && m.sender === senderName();
+  el.className = 'msg' + (mine ? ' mine' : '') + (m.bot ? ' bot' : '') + (m.from_frame ? ' frameReply' : '');
+  el.id = 'm' + m.id;
+  let h = `<div class="who">${esc(whoOf(m))}</div>`;
+  const parent = m.reply_to && messages.find(x => x.id === m.reply_to);
+  if (parent) h += `<div class="quote" data-goto="${parent.id}">${esc(parent.from_frame ? 'Frame' : parent.sender)}: ${esc(summary(parent))}</div>`;
+  const url = m.file ? '/chat-media/' + encodeURIComponent(m.file) : '';
+  if (m.kind === 'photo') h += `<a href="${url}" target="_blank"><img src="${url}" loading="lazy" alt="Photo" ${mediaBox(m)}></a>`;
+  if (m.kind === 'video') h += `<video src="${url}#t=0.1" controls preload="metadata" ${mediaBox(m)}></video>`;   // #t: show a first frame, not a black box
+  if (m.kind === 'voice') h += `<audio src="${url}" controls preload="metadata"></audio>`;
+  if (m.text) h += `<div class="text">${fmt(m.text)}</div>`;
+  h += `<div class="meta">${esc(m.time)}<button class="replyBtn" data-reply="${m.id}" title="Reply">↩︎</button></div>`;
+  el.innerHTML = h;
+  el.querySelectorAll('img, video, audio').forEach(x =>
+    x.addEventListener(x.tagName === 'IMG' ? 'load' : 'loadedmetadata', () => { if (stick) toBottom(); }));
+  return el;
+}
+function addMsg(m) {
+  if (messages.some(x => x.id === m.id)) return;
+  messages.push(m);
+  $('#msgs').appendChild(msgEl(m));
+  if (stick || !m.bot) { toBottom(); stick = true; }
+}
+function setReply(id) {
+  replyTo = id;
+  const m = messages.find(x => x.id === id);
+  $('#replyBar').hidden = !m;
+  if (m) { $('#replyText').textContent = `↩︎ Replying to ${m.from_frame ? 'Frame' : m.sender}: ${summary(m)}`; $('#text').focus(); }
+}
+$('#msgs').addEventListener('click', e => {
+  const r = e.target.closest('[data-reply]');
+  if (r) return setReply(+r.dataset.reply);
+  const q = e.target.closest('[data-goto]');
+  if (q) {
+    const el = document.getElementById('m' + q.dataset.goto);
+    if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1200); }
+  }
+});
+$('#replyCancel').onclick = () => setReply(null);
+
+const senderName = () => $('#sender').value.trim() || 'Family';
+$('#sender').value = localStorage.getItem('sender') || 'Dan';
+// Only re-mark which bubbles are "mine": rebuilding the list here would swap out
+// the element under the pointer when the field blurs on a click elsewhere.
+$('#sender').onchange = () => {
+  localStorage.setItem('sender', $('#sender').value.trim());
+  const me = senderName();
+  messages.forEach(m => document.getElementById('m' + m.id)?.classList.toggle('mine', !m.bot && m.sender === me));
+};
+
+async function send(fields) {
+  const fd = new FormData();
+  fd.append('sender', senderName());
+  if (replyTo) fd.append('reply_to', replyTo);
+  for (const [k, v] of Object.entries(fields)) fd.append(k, v);
+  status('Sending…');
+  try {
+    const r = await fetch('/api/send', { method: 'POST', body: fd, headers: SIM_HEADER });
+    const j = await r.json();
+    status(j.ok ? '' : '⚠️ ' + (j.error || 'Error'));
+    if (j.ok) setReply(null);
+  } catch { status('⚠️ Could not send'); }
+}
+$('#composer').onsubmit = e => {
+  e.preventDefault();
+  const text = $('#text').value.trim();
+  if (!text) return;
+  $('#text').value = '';
+  send({ text });
+};
+$('#file').onchange = () => {
+  const f = $('#file').files[0];
+  $('#file').value = '';
+  if (f) send({ file: f });
+};
+
+// Family voice note: hold the 🎙️ button
+const vb = $('#voiceBtn');
+let voiceRec = null;
+vb.addEventListener('pointerdown', async e => {
+  e.preventDefault(); try { vb.setPointerCapture(e.pointerId); } catch {}
+  if (!micSupported) return micBanner();
+  vb.classList.add('recording'); vb.held = true;
+  try {
+    const s = await getMic();
+    if (vb.held) { voiceRec = recorder(s); status('🎙️ Recording a voice note… release to send'); }
+  } catch { vb.classList.remove('recording'); micBanner(); }
+});
+const voiceUp = async () => {
+  vb.held = false; vb.classList.remove('recording');
+  const r = voiceRec; voiceRec = null;
+  if (!r) return;
+  r.stop();
+  const blob = await r.done;
+  if (blob.size < 2000) return status('Voice note too short');
+  send({ file: new File([blob], 'voice', { type: blob.type || 'audio/webm' }), voice: '1' });
+};
+vb.addEventListener('pointerup', voiceUp);
+vb.addEventListener('pointercancel', voiceUp);
+vb.addEventListener('contextmenu', e => e.preventDefault());
+
+/* ---------- connection ---------- */
+async function loadState() {
+  const s = await (await fetch('/api/state')).json();
+  info = s.info; messages = s.messages; render();
+  $('#ver').textContent = `real code · branch ${info.branch} · ${info.commit} “${info.subject}” · ${info.date}`;
+  $('#panelLink').href = `http://${location.hostname}:${info.dashboard_port || 8080}/`;
+  micBanner();
+  if (micSupported && navigator.permissions) {
+    navigator.permissions.query({ name: 'microphone' }).then(p => { if (p.state === 'granted') getMic().catch(() => {}); }).catch(() => {});
+  }
+}
+function connect() {
+  const es = new EventSource('/api/events');
+  es.onopen = () => {
+    $('#conn').classList.add('on');
+    if (wasDown) { $('#screen').src = '/stream.mjpg?t=' + Date.now(); loadState(); }
+    wasDown = false;
+  };
+  es.onerror = () => { $('#conn').classList.remove('on'); wasDown = true; };
+  es.onmessage = e => {
+    const ev = JSON.parse(e.data);
+    if (ev.type === 'chat') addMsg(ev.msg);
+    else if (ev.type === 'audio') onAudio(ev);
+  };
+}
+loadState().then(connect);
+</script>
+</body>
+</html>

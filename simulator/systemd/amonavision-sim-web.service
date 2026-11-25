@@ -1,0 +1,18 @@
+# Example user unit: copy to ~/.config/systemd/user/ and adjust the paths, then
+#   systemctl --user daemon-reload && systemctl --user enable --now amonavision-sim-web
+[Unit]
+Description=AmonaVision simulator dashboard (the frame's web/app.py on :8080)
+After=network-online.target
+
+[Service]
+WorkingDirectory=%h/amonavision-frame
+ExecStart=%h/amonavision-frame/venv/bin/python simulator/dashboard.py
+# WEB_PASSWORD, as in the frame's .env (see simulator/dashboard.env.example)
+EnvironmentFile=%h/amonavision-frame/simulator/dashboard.env
+Environment=PYTHONUNBUFFERED=1
+#Environment=SIM_BIND=0.0.0.0
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=default.target

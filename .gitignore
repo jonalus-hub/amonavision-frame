@@ -47,3 +47,8 @@ Thumbs.db
 
 # Test runs
 .pytest_cache/
+
+# Simulator (simulator/README.md): its chat, self-signed certificate and dashboard password
+simulator/data/
+simulator/certs/
+simulator/dashboard.env

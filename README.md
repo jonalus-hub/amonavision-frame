@@ -53,6 +53,7 @@ AmonaVision/
 ├── platform/                   ← Per-board system files (config.txt / cmdline.txt fragments)
 ├── docs/hardware/              ← One page per board and per panel (pins, overlays, audio, status)
 ├── tests/                      ← pytest suite (python -m pytest tests/)
+├── simulator/                  ← Try the frame in a browser, no Pi needed (simulator/README.md)
 ├── viewer.py                   ← Pygame display engine
 ├── start.py                    ← Process supervisor (viewer + bot)
 ├── run.py                      ← Bot entry point
@@ -439,6 +440,14 @@ Run `bash /home/av/AmonaVision/test_setup.sh` for a full check. Common issues:
 | `setup.sh` said "No internet" on a 4G-only box | Old probe used TCP/53, which mobile APNs block | Fixed — probe is now TCP/443 and non-fatal |
 | Testing at home shows everything routing over Wi-Fi, not the dongle | Fine — Wi-Fi has priority-20/metric-700 fallback status, so it only wins when the dongle has no internet; check `/` on the dashboard to see which link is actually active | If the dongle DOES have signal/data but Wi-Fi still wins, check `nmcli -f NAME,DEVICE connection show --active` — the dongle should be on `4g-dongle`; re-run `setup.sh` if not |
 | Everything routes into the dead dongle instead of falling back to Wi-Fi | NetworkManager connectivity check missing — without it a stick with no LTE still looks healthy to NetworkManager | Re-run `setup.sh` (installs `20-connectivity-check.conf`); the SIM itself may still need fixing |
+
+---
+
+## Simulator
+
+`simulator/` runs the real frame code on an ordinary Linux machine, with a web page in place of the
+hardware: the frame with its buttons, speaker and microphone, and a family group chat that goes through
+the real bot code. It never contacts Telegram. See [simulator/README.md](simulator/README.md).
 
 ---
 

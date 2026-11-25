@@ -1,0 +1,18 @@
+# Example user unit: copy to ~/.config/systemd/user/ and adjust the paths, then
+#   systemctl --user daemon-reload && systemctl --user enable --now amonavision-sim
+[Unit]
+Description=AmonaVision simulator (frame code + web UI on :8099 / :8443)
+After=network-online.target
+
+[Service]
+WorkingDirectory=%h/amonavision-frame
+ExecStart=%h/amonavision-frame/venv/bin/python simulator/simulator.py
+Environment=PYTHONUNBUFFERED=1
+# The page has no login: listen beyond localhost only on a network you trust.
+#Environment=SIM_BIND=0.0.0.0
+# The viewer exits on /restart and at 04:00, as on the frame: come straight back.
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=default.target

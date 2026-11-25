@@ -1,0 +1,171 @@
+[
+ {
+  "file": "01-beach-walk.jpg",
+  "sender": "Emma",
+  "title": "People Family",
+  "creator": "Natalya Zaritskaya",
+  "source": "https://stocksnap.io/photo/people-family-Z59RZ5SREK",
+  "license": "CC0 1.0 (public domain dedication)",
+  "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+  "size": "960x640",
+  "kind": "photo",
+  "voice_note": {
+   "file": "01-beach-walk.ogg",
+   "text": "Hi Amona! We're at the beach today. The water is freezing, but the kids won't get out. Big kiss from all of us!",
+   "tts_voice": "af_heart",
+   "made_with": "Kokoro TTS v1.0 (Apache-2.0), synthetic voice: no real person, no cost, no attribution required"
+  }
+ },
+ {
+  "file": "02-grandma-christmas.jpg",
+  "sender": "Sara",
+  "title": "Grandmother Child",
+  "creator": "PS Imaging",
+  "source": "https://stocksnap.io/photo/grandmother-child-NNKPN9QYIR",
+  "license": "CC0 1.0 (public domain dedication)",
+  "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+  "size": "960x640",
+  "kind": "photo"
+ },
+ {
+  "file": "03-picnic-dog.jpg",
+  "sender": "Leo",
+  "title": "Family Portrait",
+  "creator": "Family Moments",
+  "source": "https://stocksnap.io/photo/family-portrait-OIUD9DEKPG",
+  "license": "CC0 1.0 (public domain dedication)",
+  "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+  "size": "960x640",
+  "kind": "photo",
+  "voice_note": {
+   "file": "03-picnic-dog.ogg",
+   "text": "Amona, look at this! Picnic in the park, and even the dog is smiling. See you on Sunday!",
+   "tts_voice": "am_michael",
+   "made_with": "Kokoro TTS v1.0 (Apache-2.0), synthetic voice: no real person, no cost, no attribution required"
+  }
+ },
+ {
+  "file": "04-living-room-games.jpg",
+  "sender": "Dan",
+  "title": "Family Playing",
+  "creator": "Direct Media",
+  "source": "https://stocksnap.io/photo/family-playing-CKT87YHJH0",
+  "license": "CC0 1.0 (public domain dedication)",
+  "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+  "size": "960x640",
+  "kind": "photo"
+ },
+ {
+  "file": "05-blanket-fort-reading.jpg",
+  "sender": "Noah",
+  "title": "Black Family",
+  "creator": "Family First",
+  "source": "https://stocksnap.io/photo/black-family-SEHHFDFUBR",
+  "license": "CC0 1.0 (public domain dedication)",
+  "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+  "size": "960x640",
+  "kind": "photo"
+ },
+ {
+  "file": "06-park-shoulders.jpg",
+  "sender": "Emma",
+  "title": "Black Family",
+  "creator": "Family First",
+  "source": "https://stocksnap.io/photo/black-family-6KRBT8MYES",
+  "license": "CC0 1.0 (public domain dedication)",
+  "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+  "size": "960x634",
+  "kind": "photo"
+ },
+ {
+  "file": "07-bedtime-story.jpg",
+  "sender": "Sara",
+  "title": "Mother Daughter",
+  "creator": "Family First",
+  "source": "https://stocksnap.io/photo/mother-daughter-FHQOAULEKZ",
+  "license": "CC0 1.0 (public domain dedication)",
+  "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+  "size": "960x640",
+  "kind": "photo",
+  "voice_note": {
+   "file": "07-bedtime-story.ogg",
+   "text": "Good night, Amona! We're reading the book you gave her. She asks for it every single night.",
+   "tts_voice": "bf_emma",
+   "made_with": "Kokoro TTS v1.0 (Apache-2.0), synthetic voice: no real person, no cost, no attribution required"
+  }
+ },
+ {
+  "file": "08-beach-splash.jpg",
+  "sender": "Leo",
+  "title": "Kid Child",
+  "creator": "Leo Rivas-Micoud",
+  "source": "https://stocksnap.io/photo/kid-child-J9ELBYMMBM",
+  "license": "CC0 1.0 (public domain dedication)",
+  "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+  "size": "960x638",
+  "kind": "photo"
+ },
+ {
+  "file": "09-baby-daisy.jpg",
+  "sender": "Noah",
+  "title": "Baby Face",
+  "creator": "Candace McDaniel",
+  "source": "https://stocksnap.io/photo/baby-face-BQHL3K0VCT",
+  "license": "CC0 1.0 (public domain dedication)",
+  "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+  "size": "960x640",
+  "kind": "photo",
+  "voice_note": {
+   "file": "09-baby-daisy.ogg",
+   "text": "Look who found a flower in the garden! She tried to eat it, of course. Lots of love, Amona.",
+   "tts_voice": "bm_george",
+   "made_with": "Kokoro TTS v1.0 (Apache-2.0), synthetic voice: no real person, no cost, no attribution required"
+  }
+ },
+ {
+  "file": "10-grandpa-walk.jpg",
+  "sender": "Dan",
+  "title": "Young Girl",
+  "creator": "Freestocks.org",
+  "source": "https://stocksnap.io/photo/young-girl-C0WTUJ65SZ",
+  "license": "CC0 1.0 (public domain dedication)",
+  "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+  "size": "960x640",
+  "kind": "photo"
+ },
+ {
+  "file": "11-grandpa-hug.jpg",
+  "sender": "Emma",
+  "title": "People Old",
+  "creator": "O.C. Gonzalez",
+  "source": "https://stocksnap.io/photo/people-old-W2QMUQHOGE",
+  "license": "CC0 1.0 (public domain dedication)",
+  "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+  "size": "960x637",
+  "kind": "photo"
+ },
+ {
+  "file": "12-orange-juice.jpg",
+  "sender": "Sara",
+  "title": "Father Son",
+  "creator": "Direct Media",
+  "source": "https://stocksnap.io/photo/father-son-JJF51GGI7A",
+  "license": "CC0 1.0 (public domain dedication)",
+  "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+  "size": "960x640",
+  "kind": "photo"
+ },
+ {
+  "file": "13-video-call-hello.mp4",
+  "kind": "video",
+  "sender": "Sara",
+  "title": "Family making a video call on smartphone",
+  "creator": "Mixkit",
+  "source": "https://mixkit.co/free-stock-video/family-making-a-video-call-on-smartphone-4523/",
+  "license": "Mixkit Stock Video Free License (commercial and non-commercial use, free, no attribution required)",
+  "license_url": "https://mixkit.co/license/#videoFree",
+  "size": "1280x720, 13 s, no sound",
+  "download_url": "https://assets.mixkit.co/videos/4523/4523-720.mp4",
+  "note": "Not in the repo: Mixkit's license lets you use the clip but not pass the file on as-is, so the simulator downloads it from Mixkit on its first start."
+ }
+]
